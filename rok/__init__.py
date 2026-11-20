@@ -1,0 +1,1 @@
+"""Rok: a voxel editor."""

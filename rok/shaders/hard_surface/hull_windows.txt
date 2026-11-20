@@ -1,0 +1,282 @@
+// xs hard_surface/hull_windows [Deck] [Spacing] [Width] [Section] [Gap] [Lit] [Seed] [Features] [Light]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Deck'     var = 'm_deck'     range = '3 16'    value = '5'    step = '1'  precision = '0' }
+// arg : { name = 'Spacing'  var = 'm_spacing'  range = '2 8'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Width'    var = 'm_width'    range = '1 4'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Section'  var = 'm_section'  range = '4 40'    value = '14'   step = '1'  precision = '0' }
+// arg : { name = 'Gap'      var = 'm_gap'      range = '0 100'   value = '25'   step = '1'  precision = '0' }
+// arg : { name = 'Lit'      var = 'm_lit'      range = '0 100'   value = '55'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Features' var = 'm_features' range = '0 100'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Light'    var = 'm_light'    range = '0 2'     value = '2'    step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = '1B2129 FFD98E FFB24A BFE9FF 7FC8F0 F2C230 FF4A3A'  names = 'Dark glass, Warm light, Warm light 2, Cool light, Cool light 2, Hazard yellow, Signal red' }
+// rok_about : 'Decks of windows, hangar bays and airlocks along the walls'
+// rok_tip Deck : The height of one deck, in cells (3 to 16). Decks are counted from the lowest layer of the grid, so the deck borders lie at multiples of Deck. A
+// rok_tip Deck : window row needs flat wall over the whole deck, so a wall lower than one deck gets no window. Only the four side walls (toward x and y) change. A
+// rok_tip Deck : window is 1 cell high up to Deck 4, 2 cells from 5, 3 cells from 8.
+// rok_tip Spacing : The distance from the start of one window to the start of the next, with Width 1. In general the period is Spacing plus Width minus 1 cells, so the
+// rok_tip Spacing : hull between windows is Spacing minus 1 cells wide. It does not change an observation deck, which has its own bars every 4 cells.
+// rok_tip Width : The width of one window, in cells (1 to 4). The hull between two windows is Spacing minus 1 cells wide. It does not change an observation deck, hangar
+// rok_tip Width : or airlock.
+// rok_tip Section : The length of one section along the wall, in cells (4 to 40). A section is lit or dark as a whole, and it can be blank hull or a feature. Windows use
+// rok_tip Section : the cells 1 to Section minus 2 of a section. A section border can get a rib. A hangar bay needs a section of 8 or more.
+// rok_tip Gap : How many sections are blank hull, in percent. 0 gives windows or a feature in every section. 100 gives blank hull in all sections, with only the ribs
+// rok_tip Gap : on the section borders.
+// rok_tip Lit : How many sections are lit as a whole, in percent. In a lit section about 12 percent of the windows are dark. In a dark section about 12 percent are
+// rok_tip Lit : lit. This changes colours only, not the shape.
+// rok_tip Seed : Picks another random layout of the same kind: other blank, lit and feature sections.
+// rok_tip Features : How many sections become an observation deck, a hangar bay or an airlock, in percent. It also sets how many section borders get a rib (this value plus
+// rok_tip Features : 15 percent). A hangar bay needs Deck 5 or more and Section 8 or more. Else the section has windows. A feature needs flat wall, so edges and corners
+// rok_tip Features : stay plain.
+// rok_tip Light : The colour of the lit windows. 0 is warm light, 1 is cool light and 2 is a mix, chosen by section. This changes colours only, not the shape.
+
+// Windows on the side walls of a hull or a station, as a big ship shows them
+// (the first version was a toy row of framed squares; the
+// second only painted, and it had to be as good as greebles, which has real
+// relief).
+// The wall is cut into decks Deck cells high; each deck has one row of
+// windows, Width cells wide, one every Spacing cells. A window is one cell
+// high on a low deck, two from a deck of 5 cells, three from 8.
+// The row is cut into sections of about Section cells; Gap is how many
+// sections are blank hull (a bulkhead, a hangar wall). Lights come on by the
+// room: a section is lit or dark as a whole, as often as Lit says, with a few
+// windows the other way. Light 0 is warm light, 1 cool light, 2 a mix by
+// section (the light colours are those of the rok_colours line).
+// Most window rows have a sill under them, and some section borders get
+// ribs that run up the wall. Features is how many sections are one of these
+// instead of windows:
+//   observation deck - a tall glass band with mullions, a ledge above and below
+//   hangar bay       - a big opening, deep and dark, a light strip at its back,
+//                      a frame of hazard stripes, red lights at its feet
+//   airlock          - a door sunk into the wall, a light beside it
+// (A hangar needs a deck of 5 cells or more and a section of 8; else the
+// section has windows.) A cell is cut only where there is hull behind it,
+// so a thin wall never gets a hole, and a part goes only where the wall is
+// flat around it, so an edge or a corner stays plain. The glass, light,
+// hazard and signal colours are those of the rok_colours line.
+
+float hw_hash(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// The palette colour nearest to colour idx made f times as bright, or idx
+// when no colour is clearly nearer to that shade than idx itself.
+float hw_shade(float idx, float f) {
+  vec3 base = palette(idx).rgb;
+  vec3 want = clamp(base * f, 0.0, 1.0);
+  vec3 e = base - want;
+  float limit = dot(e, e) * 0.35;
+  float best = idx;
+  for (int i = 1; i < 256; i++) {
+    vec3 c = palette(float(i)).rgb - want;
+    float dd = dot(c, c);
+    if (dd < limit && float(i) != idx) { limit = dd; best = float(i); }
+  }
+  return best;
+}
+
+vec3 hw_dir(float n) {
+  return n < 0.5 ? vec3(1.0, 0.0, 0.0) : (n < 1.5 ? vec3(-1.0, 0.0, 0.0) : (n < 2.5 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, -1.0, 0.0)));
+}
+
+// Filled here and open in front: a cell of the wall's outer layer.
+bool hw_wall(vec3 p, vec3 d) {
+  return voxel(p) != 0.0 && voxel(p + d) == 0.0;
+}
+
+// The side wall a filled cell belongs to: the first open side toward x or
+// y (0 +x, 1 -x, 2 +y, 3 -y), -1 for none.
+float hw_face(vec3 v) {
+  for (int n = 0; n < 4; n++) {
+    if (voxel(v + hw_dir(float(n))) == 0.0) return float(n);
+  }
+  return -1.0;
+}
+
+// Flat wall at the outer-layer cell s, from du0 to du1 along the wall and
+// dz0 to dz1 up it (corners and middle). A part asks for a row more than
+// its frame, so a frame never sits on the wall's top row.
+bool hw_fits(vec3 s, vec3 d, vec3 along, float du0, float du1, float dz0, float dz1) {
+  vec3 z = vec3(0.0, 0.0, 1.0);
+  return hw_wall(s + along * du0 + z * dz0, d) && hw_wall(s + along * du1 + z * dz0, d)
+      && hw_wall(s + along * du0 + z * dz1, d) && hw_wall(s + along * du1 + z * dz1, d)
+      && hw_wall(s + along * floor((du0 + du1) * 0.5) + z * floor((dz0 + dz1) * 0.5), d);
+}
+
+// The light of a lit window: warm or cool by section, a few panes paler.
+float hw_light(vec3 sid, vec3 wid) {
+  float cool = m_light < 0.5 ? 0.0 : (m_light < 1.5 ? 1.0 : step(0.5, hw_hash(sid + 5.3)));
+  float tone = hw_hash(wid + 2.2) < 0.25 ? 1.0 : 0.0;
+  return color_sel(1.0 + cool * 2.0 + tone);
+}
+
+// The colour of a cell k cells out from the outer-layer cell s of side wall
+// n (k 0 is that cell, k -1 the one behind it, and so on). 0 leaves the cell
+// empty, -1 keeps it as it was.
+float hw_at(vec3 s, float n, float k) {
+  vec3 d = hw_dir(n);
+  vec3 c = floor(s);
+  float here = voxel(s);
+  vec3 z = vec3(0.0, 0.0, 1.0);
+  vec3 along = n < 1.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+  float u = n < 1.5 ? c.y : c.x;
+  float face = n;
+  float D = m_deck;
+  float deck = floor(c.z / D);
+  float row = c.z - deck * D;
+  float sec = floor(u / m_section);
+  float su = u - sec * m_section;
+  vec3 sid = vec3(sec, deck, face + m_seed * 0.1);
+  // How deep a cell may be cut: as deep as there is hull behind the cut.
+  float behind = 0.0;
+  for (int j = 1; j <= 3; j++) {
+    if (voxel(s - d * float(j)) == 0.0) break;
+    behind = float(j);
+  }
+  // A window row needs its deck's whole wall, floor row to top row: the side
+  // of a small step (a raised plate, a box) is no wall for windows.
+  bool even = hw_wall(s + z, d) && hw_wall(s - z, d) && hw_wall(s + along, d) && hw_wall(s - along, d)
+              && hw_wall(s - z * row, d) && hw_wall(s + z * (D - 1.0 - row), d);
+  // Ribs: on some section borders, a rib up the wall.
+  if (su == 0.0) {
+    bool rib = hw_hash(vec3(sec, face, 41.0 + m_seed * 0.1)) * 100.0 < m_features + 15.0;
+    if (rib && hw_wall(s + z, d) && hw_wall(s - z, d) && hw_wall(s + along, d) && hw_wall(s - along, d)) {
+      if (k == 1.0) return here;
+    }
+    return k >= 1.0 ? 0.0 : -1.0;
+  }
+  if (hw_hash(sid) * 100.0 < m_gap) return k >= 1.0 ? 0.0 : -1.0;
+  float H = D >= 8.0 ? 3.0 : (D >= 5.0 ? 2.0 : 1.0);
+  float wbot = floor(D * 0.5) - floor((H - 1.0) * 0.5);
+  float wtop = wbot + H - 1.0;
+  bool room = hw_hash(sid + 3.1) * 100.0 < m_lit;
+  // A section's feature, -1 for windows.
+  float kind = hw_hash(sid + 9.4) * 100.0 < m_features ? floor(hw_hash(sid + 6.2) * 3.0) : -1.0;
+  if (kind > 0.5 && kind < 1.5 && (D < 5.0 || m_section < 8.0)) kind = -1.0;
+  if (kind > 0.5 && kind < 1.5) {
+    // Hangar bay: the opening from row 1 to D - 2, two cells in from the
+    // section's sides; a frame of stripes around it.
+    float l = 2.0;
+    float r = m_section - 3.0;
+    if (!hw_fits(s, d, along, 1.0 - su, m_section - 2.0 - su, -row, D - row)) kind = -1.0;
+    else {
+      bool open = su >= l && su <= r && row >= 1.0 && row <= D - 2.0;
+      bool frame = !open && su >= l - 1.0 && su <= r + 1.0 && row <= D - 1.0;
+      float hd = 2.0;  // how deep the bay goes
+      if (open) {
+        if (k >= 1.0) return 0.0;
+        float back = row == D - 2.0 ? hw_light(sid, vec3(su, deck, face)) : color_sel(0.0);
+        if (behind < hd) return k == 0.0 ? back : -1.0;  // too thin: painted
+        if (-k < hd) return 0.0;
+        return -k == hd ? back : -1.0;
+      }
+      if (frame) {
+        // Red lights at the bay's feet, standing out of the frame.
+        bool foot = row == 0.0 && (su == l - 1.0 || su == r + 1.0);
+        if (foot && k == 1.0) return color_sel(6.0);
+        if (k == 0.0) return mod(su + row, 4.0) < 2.0 ? color_sel(5.0) : color_sel(0.0);
+      }
+      return k >= 1.0 ? 0.0 : -1.0;
+    }
+  }
+  if (kind > 1.5) {
+    // Airlock: a door two cells wide, three high (less on a low deck), sunk
+    // one cell, a dark frame, a light beside it.
+    float m = floor(m_section * 0.5);
+    float dh = min(3.0, D - 2.0);
+    if (hw_fits(s, d, along, m - 2.0 - su, m + 3.0 - su, -row, dh + 2.0 - row)) {
+      bool door = (su == m || su == m + 1.0) && row >= 1.0 && row <= dh;
+      bool frame = !door && su >= m - 1.0 && su <= m + 2.0 && row <= dh + 1.0;
+      if (door) {
+        if (k >= 1.0) return 0.0;
+        float leaf = hw_shade(here, 0.62);
+        if (behind < 1.0) return k == 0.0 ? leaf : -1.0;
+        if (k == 0.0) return 0.0;
+        return k == -1.0 ? leaf : -1.0;
+      }
+      if (frame && k == 0.0) return color_sel(0.0);
+      if (su == m + 3.0 && row == dh) {
+        float lamp = room ? color_sel(6.0) : color_sel(3.0);
+        if (k == 1.0) return lamp;
+      }
+      return k >= 1.0 ? 0.0 : -1.0;
+    }
+  }
+  // Observation deck: a glass band three rows high (as the deck allows).
+  bool band = kind > -0.5 && kind < 0.5;
+  if (band) {
+    float bh = clamp(max(H, 3.0), 1.0, max(D - 2.0, 1.0));
+    wbot = floor(D * 0.5) - floor((bh - 1.0) * 0.5);
+    wtop = wbot + bh - 1.0;
+  }
+  bool inside = su >= 1.0 && su <= m_section - 2.0;
+  // A sill under the window row: a ledge over it would hide the windows
+  // from above. A glass band has a ledge above and below.
+  bool sill = inside && hw_hash(sid + 4.4) < 0.7;
+  if (k >= 1.0) {
+    bool ledge = (sill || band) && row == wbot - 1.0 || band && row == wtop + 1.0;
+    if (k == 1.0 && inside && ledge && even) return here;
+    return 0.0;
+  }
+  if (row < wbot || row > wtop || !inside || !even) return -1.0;
+  float slot = mod(su - 1.0, m_spacing + m_width - 1.0);
+  vec3 wid = vec3(floor((su - 1.0) / (m_spacing + m_width - 1.0)), deck, face + sec * 13.0 + m_seed * 0.1);
+  float glass;
+  if (band) {
+    // Mullions every four cells; the band is lit when its room is.
+    if (mod(su - 1.0, 4.0) == 3.0 && su < m_section - 2.0) return k == 0.0 ? hw_shade(here, 0.72) : -1.0;
+    glass = room ? hw_light(sid, wid) : color_sel(0.0);
+  } else {
+    // Between the windows of a section, the hull is a darker strip: the row
+    // reads as one window band, as on a big ship.
+    bool lit = room != (hw_hash(wid) < 0.12);
+    glass = slot >= m_width ? hw_shade(here, 0.72) : (lit ? hw_light(sid, wid) : color_sel(0.0));
+  }
+  // A window row stays flush with the wall, its sill gives it depth: seen
+  // from above, a sunk row shows mostly its floor, and from a corner single
+  // sunk windows show only their sides. The tall glass band of an
+  // observation deck sits a cell deep where the hull is thick enough.
+  if (behind < 1.0 || !band) return k == 0.0 ? glass : -1.0;
+  if (k == 0.0) return 0.0;
+  return k == -1.0 ? glass : -1.0;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here > 0.0) {
+    float n = hw_face(v);
+    if (n >= 0.0) {
+      float col = hw_at(v, n, 0.0);
+      return col < 0.0 ? here : col;
+    }
+    // Behind the outer layer: the back of a window, a door or a bay.
+    for (int m = 0; m < 4; m++) {
+      vec3 d = hw_dir(float(m));
+      for (int j = 1; j <= 3; j++) {
+        vec3 s = v + d * float(j);
+        if (voxel(s) == 0.0) break;
+        if (voxel(s + d) != 0.0) continue;
+        if (hw_face(s) == float(m)) {
+          float col = hw_at(s, float(m), -float(j));
+          if (col >= 0.0) return col;
+        }
+        break;
+      }
+    }
+    return here;
+  }
+  // Empty space: a ledge, a rib or a light standing out of the wall.
+  for (int m = 0; m < 4; m++) {
+    vec3 s = v - hw_dir(float(m));
+    if (voxel(s) != 0.0 && hw_face(s) == float(m)) {
+      float col = hw_at(s, float(m), 1.0);
+      if (col > 0.0) return col;
+    }
+  }
+  return 0.0;
+}

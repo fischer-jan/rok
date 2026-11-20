@@ -1,0 +1,18 @@
+// xs_begin
+// author : 'Rok test'
+// arg : { name = 'Colour'  var = 'm_colour'  range = '1 255'  value = '4'  step = '1'  precision = '0' }
+// arg : { name = 'Steps'  var = 'm_steps'  range = '0 1000000000'  value = '3'  step = '1'  precision = '0' }
+// xs_end
+
+// Globals that start from arguments, and a loop as long as Steps says:
+// a huge Steps is a runaway loop that the guard must end.
+float colour = m_colour;
+int steps = int(m_steps), unused;
+
+float map(vec3 v) {
+  float n = 0.0;
+  for (int i = 0; i < steps; i++) { n += 1.0; }
+  int k = 0;
+  while (k < steps) { k++; }
+  return n >= 3.0 ? colour : 0.0;
+}

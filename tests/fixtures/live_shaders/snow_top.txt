@@ -1,0 +1,9 @@
+// xs_begin
+// author : 'Rok test'
+// xs_end
+// Snow: every voxel with empty air above it turns colour 9.
+float map(vec3 v) {
+    float c = voxel(v);
+    if (c > 0.0 && voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0) return 9.0;
+    return c;
+}

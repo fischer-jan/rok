@@ -1,0 +1,25 @@
+// xs_begin
+// author : 'Rok test'
+// arg : { var = 'a1' name = 'A1' value = '1' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a2' name = 'A2' value = '2' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a3' name = 'A3' value = '3' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a4' name = 'A4' value = '4' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a5' name = 'A5' value = '5' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a6' name = 'A6' value = '6' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a7' name = 'A7' value = '7' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'a8' name = 'A8' value = '8' range = '0 10' step = '1' precision = '0' }
+// arg : { var = 'm' name = 'Colour' value = '9' range = '0 255' step = '1' precision = '0' }
+// arg : { var = 'r' name = 'Radius' value = '4' range = '1 32' step = '1' precision = '0' }
+// xs_end
+// What the Metal translation needs rewritten: ten arguments, a parameter
+// named like an argument, a struct constructor, vector != and a C++ keyword.
+struct Hit { float d; float c; };
+Hit probe(vec3 p, float r) { return Hit(length(p) - r, m); }
+float map(vec3 v) {
+	vec3 c = floor(i_volume_size * 0.5);
+	vec3 cell = floor(v);
+	float try = 0.0;
+	if (cell != c) try = 1.0;
+	Hit h = probe(v - i_volume_size * 0.5, r);
+	return h.d <= 0.0 ? h.c + (try - try) : voxel(v);
+}

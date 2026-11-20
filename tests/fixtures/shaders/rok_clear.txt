@@ -1,0 +1,8 @@
+// xs_begin
+// author : 'Rok test'
+// xs_end
+
+// Empties every cell: a run Rok must refuse, keeping the model as it is.
+float map(vec3 v) {
+  return voxel(v) > 0.0 ? 0.0 : 0.0;
+}

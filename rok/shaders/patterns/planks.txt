@@ -1,0 +1,98 @@
+// xs patterns/planks [Width] [Length] [Gap] [Grain] [Variation] [Direction] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Width'      var = 'm_width'   range = '1 8'     value = '3'    step = '1'  precision = '0' }
+// arg : { name = 'Length'     var = 'm_length'  range = '4 48'    value = '14'   step = '1'  precision = '0' }
+// arg : { name = 'Gap'        var = 'm_gap'     range = '0 1'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Grain'      var = 'm_grain'   range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Variation'  var = 'm_vary'    range = '0 100'   value = '70'   step = '1'  precision = '0' }
+// arg : { name = 'Direction'  var = 'm_dir'     range = '0 1'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Paints wooden planks with grain, joints and knots'
+// rok_colours : { start = '0'  rgb = 'A8743F B9844C 966536 7A522D 4A3220' }
+// Rok puts these colours in the palette from the selected colour on: three
+// wood tones, the grain and the dark of gaps and knots.
+// rok_tip Width : Plank width in cells, across the plank. With Gap 1 each row also takes one cell for the gap line. 1 gives thin strips, 8 gives wide boards.
+// rok_tip Length : Plank length in cells, along the plank. Joints are staggered at random from row to row. Knots appear only when Length is 6 or more.
+// rok_tip Gap : 1 draws a dark line between the planks and at the joints, in the fifth colour. 0 leaves it out, so the planks touch.
+// rok_tip Grain : How many thin streaks and how many knots the wood has, in percent. 0 gives plain planks. Knots need a Length of 6 or more.
+// rok_tip Variation : Percent of planks that get a lighter or darker tone. 0 gives one tone for all planks. 100 gives every plank a tone.
+// rok_tip Direction : 0 lays the planks level on walls and along x on floors. 1 stands them up on walls and runs them along y on floors.
+// rok_tip Seed : Picks another random layout of the joints, tones, grain and knots.
+
+// Paints wooden planks onto the voxels that are there: floors, walls,
+// crates, doors, ships. Width is how wide a plank is, Length how long; the
+// joints where two planks meet are staggered from row to row. Gap 1 draws a
+// dark line between the planks, 0 leaves it out. Grain is how many thin
+// streaks run along the wood, and how many knots it has. Variation is how
+// many planks get a lighter or darker tone. Direction 0 lays the planks
+// level on walls (as siding) and along x on floors; 1 stands them up on
+// walls and runs them along y on floors.
+//
+// Each voxel gets the planks of the face it shows. A voxel with an open
+// side is on a wall: the planks run along x + y there, so they go around
+// corners without a break. A voxel open only above or below is on a floor
+// or a ceiling: the planks lie in x and y.
+
+float pk_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// Smooth noise along one line, 0 to 1.
+float pk_noise(float x, vec3 id) {
+  float i = floor(x);
+  float f = x - i;
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(pk_hash3(id + vec3(i, 0.0, 0.0)), pk_hash3(id + vec3(i + 1.0, 0.0, 0.0)), f);
+}
+
+float map(vec3 v) {
+  if (voxel(v) == 0.0) return 0.0;
+  vec3 c = floor(v);
+  bool side = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0
+    || voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+  bool capped = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+  // (u, w): u runs along a plank, w across the planks.
+  vec2 uw = vec2(c.x + c.y, c.z);
+  float face = 0.0;
+  if (capped && !side) {
+    uw = c.xy;
+    face = 1.0;
+  }
+  if (m_dir > 0.5) uw = uw.yx;
+  float gap = m_gap > 0.5 ? 1.0 : 0.0;
+  float grain_colour = i_color_index + 3.0;
+  float dark = i_color_index + 4.0;
+
+  // The row of planks, and the cell across inside it.
+  float row = floor(uw.y / (m_width + gap));
+  float across = uw.y - row * (m_width + gap);
+  if (across >= m_width) return dark;
+  // The plank in the row: each row's joints are shifted at random.
+  vec3 rid = vec3(row, face * 17.0, m_seed);
+  float u = uw.x + floor(pk_hash3(rid) * m_length);
+  float seg = floor(u / m_length);
+  float along = u - seg * m_length;
+  if (gap > 0.0 && along < 1.0) return dark;
+  vec3 id = vec3(seg, row, m_seed + face * 31.0);
+
+  // A knot now and then: a dark spot with grain around it.
+  float g = m_grain / 100.0;
+  if (pk_hash3(id + 4.4) < g * 0.35 && m_length >= 6.0) {
+    vec2 knot = vec2(2.0 + floor(pk_hash3(id + 5.5) * (m_length - 4.0)), floor(pk_hash3(id + 6.6) * m_width));
+    vec2 d = abs(vec2(along, across) - knot);
+    if (d.x < 0.5 && d.y < 0.5) return dark;
+    if (d.x < 1.5 && d.y < 0.5) return grain_colour;
+  }
+  // Grain: a thin streak along the plank, broken here and there.
+  float lane = pk_hash3(id + vec3(across, 1.3, 0.0));
+  if (lane < g * 0.55 && pk_noise(along / 3.0, id + vec3(0.0, across, 2.0)) > 0.4) return grain_colour;
+
+  // The plank's tone.
+  if (pk_hash3(id + 9.1) * 100.0 >= m_vary) return i_color_index;
+  return i_color_index + (pk_hash3(id + 3.7) > 0.5 ? 1.0 : 2.0);
+}

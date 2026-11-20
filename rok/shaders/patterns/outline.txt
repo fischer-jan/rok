@@ -1,0 +1,70 @@
+// xs patterns/outline [Mode] [Shade]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Mode'   var = 'm_mode'   range = '0 2'  value = '2'  step = '1'  precision = '0' }
+// arg : { name = 'Shade'  var = 'm_shade'  range = '0 2'  value = '0'  step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Draws lines where colours meet and along the edges'
+// rok_tip Mode : 0 draws lines where two colours meet, so the model needs at least two colours. 1 draws the outer edges and corners. 2 draws both. A model of one colour gets no line in Mode 0.
+// rok_tip Shade : 0 draws the lines in the current colour. A line that would get the colour it already has does not show, so the current colour must be a colour the lines do not already have. In Mode 0 no line is drawn next to voxels of the current colour. 1 draws each line in a darker shade of its own colour. 2 draws it lighter. A colour with no such shade in the palette stays as it is.
+
+// Paints lines onto the model. Mode 0 outlines where two colours meet (one
+// voxel wide, on one side), Mode 1 picks out the outer edges and corners of
+// the shape, Mode 2 does both.
+//
+// Shade 0 paints the lines in the current colour. Shade 1 paints each line
+// voxel a darker shade of its own colour, Shade 2 a lighter one: the nearest
+// shade the palette has. Dark lines give a cel-shaded look; light edges look
+// like worn paint. A voxel whose colour has no such shade stays as it is.
+
+// A shade of the colour in slot here: lighter when up is true, else darker.
+// It is the palette colour nearest to the wanted one among those that
+// really are lighter (or darker); hue counts twice as much as brightness,
+// so a shade keeps its hue.
+float ol_shade(float here, bool up) {
+  vec3 c = palette(here).rgb;
+  vec3 w = vec3(0.299, 0.587, 0.114);
+  float lc = dot(c, w);
+  vec3 want = up ? mix(c, vec3(1.0), 0.35) : c * 0.6;
+  float best = here;
+  float best_d = 1e9;
+  for (int i = 1; i < 256; i++) {
+    vec3 q = palette(float(i)).rgb;
+    float dl = dot(q, w) - lc;
+    if (up ? dl < 0.04 : dl > -0.04) continue;
+    vec3 d = q - want;
+    float l = dot(d, w);
+    vec3 hue = d - l;
+    float dist = l * l + 2.0 * dot(hue, hue);
+    if (dist < best_d) { best_d = dist; best = float(i); }
+  }
+  return best;
+}
+
+float ol_line(float here) {
+  if (m_shade < 0.5) return i_color_index;
+  return ol_shade(here, m_shade > 1.5);
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here == 0.0) return 0.0;
+  if (m_mode > 0.5) {
+    bool ox = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0;
+    bool oy = voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+    bool oz = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+    float open = (ox ? 1.0 : 0.0) + (oy ? 1.0 : 0.0) + (oz ? 1.0 : 0.0);
+    if (open >= 2.0) return ol_line(here);
+  }
+  if (m_mode < 0.5 || m_mode > 1.5) {
+    for (int k = 0; k < 6; k++) {
+      vec3 d = k == 0 ? vec3(1.0, 0.0, 0.0) : k == 1 ? vec3(-1.0, 0.0, 0.0) : k == 2 ? vec3(0.0, 1.0, 0.0)
+             : k == 3 ? vec3(0.0, -1.0, 0.0) : k == 4 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 0.0, -1.0);
+      float other = voxel(v + d);
+      // One side of the border only: the voxel with the higher slot.
+      if (other > 0.0 && other != here && (m_shade > 0.5 || other != i_color_index) && here > other) return ol_line(here);
+    }
+  }
+  return here;
+}

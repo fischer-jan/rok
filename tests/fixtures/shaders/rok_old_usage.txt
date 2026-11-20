@@ -1,0 +1,8 @@
+// usage
+// 'xs rok_old_usage colour proba' : e.g. 'xs rok_old_usage 12 0.25'
+//
+// An old-style shader: no header, its arguments come from the usage line.
+
+float map(vec3 v) {
+  return v.x < iVolumeSize.x * iArgs[1] ? iArgs[0] : 0.0;
+}

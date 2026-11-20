@@ -1,0 +1,80 @@
+// xs weathering/cover [Kind] [Amount] [Thickness] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Kind'       var = 'm_kind'    range = '0 3'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Amount'     var = 'm_amount'  range = '0 100'   value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Thickness'  var = 'm_thick'   range = '1 8'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Snow, grass, sand or moss on everything that faces up'
+// rok_colours : { start = '0'  rgb = 'F4F7FB CBD6E2 7DBE4A 4E8A2E E3D19A C4AD72 6E9A3A 48692A'  names = 'Snow, Snow shade, Grass, Grass shade, Sand, Sand shade, Moss, Moss shade' }
+// Rok puts these colours in the palette from the selected colour on: two for
+// snow, grass, sand and moss each.
+// rok_tip Kind : 0 is snow, 1 is grass, 2 is sand and 3 is moss. Snow and sand lie as a layer on everything that faces up. Grass grows as blades. Moss grows in patches on tops and sides.
+// rok_tip Amount : How much of the surface gets covered, in percent. For snow, grass and sand 0 covers almost nothing. For moss 0 still leaves some small patches.
+// rok_tip Thickness : How many cells deep the cover can be. Snow and sand are 1 to Thickness cells deep. Grass blades are 1 to Thickness plus 1 cells tall. Moss is always one cell thick, so Thickness has no effect when Kind is 3.
+// rok_tip Seed : Picks another random layout of the cover.
+
+// Covers the model. Kind 0 is snow and 2 sand: a layer on everything that
+// faces up, up to Thickness deep, thinner in places. Kind 1 is grass: blades
+// of random height on everything that faces up. Kind 3 is moss: patches on
+// tops and sides. Amount is how much of the model gets covered. It only adds
+// voxels, in empty cells.
+
+float cv_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cv_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(cv_hash3(i), cv_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(cv_hash3(i + vec3(0.0, 1.0, 0.0)), cv_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(cv_hash3(i + vec3(0.0, 0.0, 1.0)), cv_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(cv_hash3(i + vec3(0.0, 1.0, 1.0)), cv_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+float map(vec3 v) {
+  if (voxel(v) > 0.0) return voxel(v);
+  vec3 p = floor(v) + 0.5;
+  vec3 seed = vec3(m_seed * 3.1, m_seed * 1.7, 0.0);
+  float kind = floor(m_kind + 0.5);
+  float first = i_color_index + kind * 2.0;
+  float amount = m_amount / 100.0;
+  if (kind > 2.5) {
+    // Moss: next to a face below or at the side, in patches.
+    bool touches = voxel(v - vec3(0.0, 0.0, 1.0)) > 0.0 || voxel(v + vec3(1.0, 0.0, 0.0)) > 0.0
+      || voxel(v - vec3(1.0, 0.0, 0.0)) > 0.0 || voxel(v + vec3(0.0, 1.0, 0.0)) > 0.0
+      || voxel(v - vec3(0.0, 1.0, 0.0)) > 0.0;
+    if (!touches) return 0.0;
+    float n = cv_noise(p / 4.0 + seed);
+    if (n > 0.2 + amount * 0.3) return 0.0;
+    return first + (cv_noise(p / 1.5 + seed) > 0.5 ? 1.0 : 0.0);
+  }
+  vec2 column = floor(v.xy);
+  float spread = cv_noise(vec3(column / 5.0, 0.0) + seed);
+  if (spread > amount) return 0.0;
+  float depth;
+  if (kind > 0.5 && kind < 1.5) {
+    // Grass: each column its own blade height.
+    depth = 1.0 + floor(cv_hash3(vec3(column, m_seed)) * (m_thick + 1.0));
+  } else {
+    float scale = kind > 1.5 ? 9.0 : 5.0;  // sand lies in wider dunes
+    depth = 1.0 + floor(cv_noise(vec3(column / scale, 7.0) + seed) * m_thick);
+  }
+  for (int k = 1; k <= 9; k++) {
+    if (float(k) > depth) break;
+    if (voxel(v - vec3(0.0, 0.0, float(k))) > 0.0) {
+      // k cells above the ground: the top cell of the cover is the light one.
+      bool top = float(k) == depth || voxel(v + vec3(0.0, 0.0, 1.0)) > 0.0;
+      if (kind > 0.5 && kind < 1.5) return first + (top ? 0.0 : 1.0);
+      return first + (cv_hash3(p + seed) > 0.8 ? 1.0 : 0.0);
+    }
+  }
+  return 0.0;
+}

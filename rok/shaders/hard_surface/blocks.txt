@@ -1,0 +1,79 @@
+// xs hard_surface/blocks [Tile X] [Tile Y] [Block] [Height] [Streets] [Painted] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'   var = 'm_tile_x'   range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'   var = 'm_tile_y'   range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Block'    var = 'm_block'    range = '8 64'    value = '16'   step = '1'  precision = '0' }
+// arg : { name = 'Height'   var = 'm_height'   range = '10 100'  value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Streets'  var = 'm_streets'  range = '1 6'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Painted'  var = 'm_painted'  range = '0 1'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Plain blocks of many heights between streets, tileable'
+// rok_tip Tile X : Which tile of an endless city this grid shows along x, from 0 to 64. Tiles with next numbers meet without a seam. The streets repeat every Block
+// rok_tip Tile X : cells. When the grid is a multiple of Block cells wide, the streets stay and only the buildings change.
+// rok_tip Tile Y : Which tile of an endless city this grid shows along y, from 0 to 64. Tiles with next numbers meet without a seam. The streets repeat every Block
+// rok_tip Tile Y : cells. When the grid is a multiple of Block cells deep, the streets stay and only the buildings change.
+// rok_tip Block : The width of one city block with its streets, in cells (8 to 64). A small value gives many small buildings. A value wider than the grid shows only a
+// rok_tip Block : part of one block. Each block is split into up to 8 buildings.
+// rok_tip Height : The height of the tallest building as a percent of the grid height (10 to 100). Every building is at least 3 cells high, and most are lower than the
+// rok_tip Height : tallest. At 100 the tallest buildings reach the top of the grid.
+// rok_tip Streets : The width of the streets, in cells (1 to 6). The pavement is a ring one cell wide round each lot, so wide streets leave less room for buildings. The
+// rok_tip Streets : streets are one layer high, on the lowest layer of the grid.
+// rok_tip Painted : 0 or 1. With 0 the whole city has the current colour. With 1 it uses four shades of the current colour, from dark to light: street, pavement, walls
+// rok_tip Painted : and roofs. The walls get the current colour itself. Change the current colour to change all four.
+// rok_tip Seed : Picks another random layout of the same kind: other building heights and other splits of the blocks. The streets stay where they are.
+
+// Blocks of many heights between streets: the plain structure of the old City
+// Blocks, kept for its own use: a greebled ground, a
+// trench, a skyline in one colour. Each block between the streets is split into
+// buildings of different heights. Block is how wide a block is with its
+// streets, Height the tallest building as a share of the grid's height,
+// Streets how wide a street is. With Painted 0 it is plain geometry in the
+// current colour; with Painted 1 the street, the pavement, the walls and the
+// roofs take the selected colours in that order. Tile numbers work as in the
+// terrain, so city tiles meet without a seam.
+
+float cb_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float map(vec3 v) {
+  vec3 c = floor(v);
+  vec2 w = c.xy + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  vec2 cell = floor(w / m_block);
+  vec2 l = w - cell * m_block;
+  bool coloured = m_painted > 0.5;
+  float street = coloured ? color_sel(0.0) : i_color_index;
+  float pavement = coloured ? color_sel(1.0) : i_color_index;
+  if (l.x < m_streets || l.y < m_streets) return c.z < 0.5 ? street : 0.0;
+  // The lot inside the pavement ring, split into buildings.
+  vec2 lo = vec2(m_streets + 1.0);
+  vec2 hi = vec2(m_block - 1.0);
+  if (any(lessThan(l, lo)) || any(greaterThanEqual(l, hi))) return c.z < 0.5 ? pavement : 0.0;
+  for (int level = 0; level < 3; level++) {
+    vec2 size = hi - lo;
+    vec3 id = vec3(cell * 7.0 + lo + hi * 0.3, float(level) + m_seed * 0.1);
+    if (max(size.x, size.y) < 6.0 || (level > 0 && cb_hash3(id) < 0.3)) break;
+    float t = 0.35 + 0.3 * cb_hash3(id + 1.7);
+    if (size.x >= size.y) {
+      float s = floor(lo.x + size.x * t);
+      if (l.x == s) return c.z < 0.5 ? pavement : 0.0;
+      if (l.x < s) hi.x = s; else lo.x = s + 1.0;
+    } else {
+      float s = floor(lo.y + size.y * t);
+      if (l.y == s) return c.z < 0.5 ? pavement : 0.0;
+      if (l.y < s) hi.y = s; else lo.y = s + 1.0;
+    }
+  }
+  vec3 b = vec3(cell * 7.0 + lo, m_seed * 0.1 + 3.0);
+  float r = cb_hash3(b);
+  float top = max(3.0, floor((0.2 + 0.8 * r * r) * i_volume_size.z * m_height / 100.0));
+  if (c.z >= top) return 0.0;
+  if (!coloured) return i_color_index;
+  if (c.z == top - 1.0) return color_sel(3.0);
+  return color_sel(2.0);
+}

@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>The Rok Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,800;1,9..144,400;1,9..144,600&family=Nunito:ital,wght@0,400;0,600;0,700;1,400&display=swap">
+<style>
+/* Layout: a sticky chapter list on the left, one reading column of about 70 characters, and
+   full-width screenshots that break out of the column. */
+:root {
+  --bg: #1c1b22; --paper: #24232b; --paper-2: #2d2c35; --ink: #ece8e1; --muted: #a9a39a; --line: #3b3942;
+  --ember: #ff8a4c; --ember-ink: #1b1109; --ember-soft: #3d2619;
+  --pin: #ff8a4c; --pin-ink: #1b1109;
+  --shadow: 0 18px 50px rgba(0, 0, 0, .45);
+  --display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --body: "Nunito", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f1ea; --paper: #ffffff; --paper-2: #efebe3; --ink: #24221f; --muted: #6b655c; --line: #ddd6ca;
+    --ember: #d9480f; --ember-ink: #ffffff; --ember-soft: #fbe3d3;
+    --pin: #d9480f; --pin-ink: #ffffff;
+    --shadow: 0 14px 40px rgba(40, 30, 10, .16);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f1ea; --paper: #ffffff; --paper-2: #efebe3; --ink: #24221f; --muted: #6b655c; --line: #ddd6ca;
+  --ember: #d9480f; --ember-ink: #ffffff; --ember-soft: #fbe3d3;
+  --pin: #d9480f; --pin-ink: #ffffff;
+  --shadow: 0 14px 40px rgba(40, 30, 10, .16);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 24px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 17px/1.65 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--ember); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--ember); outline-offset: 3px; border-radius: 4px; }
+kbd {
+  font: 600 .82em/1 var(--body); color: var(--ink); background: var(--paper-2);
+  border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; padding: 3px 7px 2px; white-space: nowrap;
+}
+code { font: .9em var(--mono); background: var(--paper-2); padding: 1px 6px; border-radius: 5px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 0 48px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } nav.toc { display: none; } }
+
+/* the chapter list */
+nav.toc { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding: 36px 0 40px; font-size: 14px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc li a { display: grid; grid-template-columns: 28px 1fr; gap: 6px; padding: 5px 8px; border-radius: 8px; color: var(--muted); text-decoration: none; }
+nav.toc li a span:first-child { font-family: var(--display); font-style: italic; color: var(--ember); opacity: .8; }
+nav.toc li a:hover { background: var(--paper); color: var(--ink); }
+nav.toc li a.on { background: var(--paper); color: var(--ink); }
+
+main { min-width: 0; padding-bottom: 120px; }
+.col { max-width: 680px; }
+p, li { max-width: 68ch; }
+
+/* the opening */
+header.hero { padding: 56px 0 24px; }
+header.hero h1 { font: 800 clamp(44px, 7vw, 84px)/1 var(--display); font-variation-settings: "opsz" 144; letter-spacing: -.03em; margin: 0 0 18px; text-wrap: balance; }
+header.hero h1 em { font-style: italic; font-weight: 400; color: var(--ember); }
+header.hero .lede { font-size: 21px; max-width: 34ch; color: var(--muted); margin: 0; }
+header.hero .lede b { color: var(--ink); font-weight: 600; }
+.colophon { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; margin: 10px 0 30px; display: flex; flex-wrap: wrap; gap: 6px 22px; }
+
+/* chapters */
+section.ch { padding: 52px 0 10px; border-top: 1px solid var(--line); }
+section.ch:first-of-type { border-top: 0; }
+.chno { font: italic 400 20px var(--display); color: var(--ember); letter-spacing: .02em; }
+section.ch h2 { font: 700 clamp(32px, 4.4vw, 46px)/1.08 var(--display); font-variation-settings: "opsz" 96; letter-spacing: -.02em; margin: 4px 0 8px; text-wrap: balance; }
+section.ch .inwhich { font: italic 400 19px/1.45 var(--display); color: var(--muted); margin: 0 0 26px; max-width: 60ch; }
+h3 { font: 700 22px/1.25 var(--display); margin: 34px 0 8px; letter-spacing: -.01em; }
+h4 { font: 700 16px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 26px 0 6px; }
+p { margin: 10px 0; }
+ul, ol { padding-left: 22px; } li { margin: 5px 0; }
+.note { border-left: 4px solid var(--ember); background: var(--ember-soft); padding: 10px 16px; border-radius: 0 12px 12px 0; margin: 18px 0; max-width: 68ch; }
+.note p { margin: 4px 0; }
+
+/* annotated screenshots */
+figure.shot { margin: 26px 0 30px; }
+figure.shot .frame { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #222; }
+figure.shot .frame img { width: 100%; }
+.pin {
+  position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%);
+  width: 26px; height: 26px; border-radius: 50%; background: var(--pin); color: var(--pin-ink);
+  font: 800 13px/26px var(--body); text-align: center; box-shadow: 0 0 0 3px rgba(0,0,0,.35), 0 4px 10px rgba(0,0,0,.4);
+}
+.pin::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid var(--pin); opacity: .55; }
+figure.shot figcaption { margin-top: 10px; font-size: 15px; color: var(--muted); }
+ol.legend { list-style: none; padding: 0; margin: 12px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 6px 22px; font-size: 15px; }
+ol.legend li { display: grid; grid-template-columns: 24px 1fr; gap: 8px; align-items: start; max-width: none; }
+ol.legend li i { font-style: normal; display: inline-block; width: 22px; height: 22px; line-height: 22px; text-align: center; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font-weight: 800; font-size: 12px; }
+ol.legend b { color: var(--ink); }
+
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 20px 0; }
+.pair figure { margin: 0; }
+.pair img { border-radius: 10px; border: 1px solid var(--line); }
+.pair figcaption { font-size: 14px; color: var(--muted); margin-top: 6px; }
+
+/* the looks grid */
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 18px 0; }
+.looks figure { margin: 0; }
+.looks img { border-radius: 10px; border: 1px solid var(--line); aspect-ratio: 2 / 1; object-fit: cover; }
+.looks figcaption { font-size: 14px; margin-top: 5px; }
+.looks figcaption b { font-weight: 700; }
+.looks figcaption span { color: var(--muted); }
+
+/* tables */
+.tbl { overflow-x: auto; margin: 16px 0 24px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 12px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+td:first-child { white-space: nowrap; }
+
+footer { margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; max-width: 68ch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" aria-label="Chapters">
+  <ol>
+    <li><a href="#hello"><span>I</span><span>Hello</span></a></li>
+    <li><a href="#window"><span>II</span><span>The Window</span></a></li>
+    <li><a href="#first"><span>III</span><span>Your First Voxel</span></a></li>
+    <li><a href="#around"><span>IV</span><span>Moving Around</span></a></li>
+    <li><a href="#colours"><span>V</span><span>Colours</span></a></li>
+    <li><a href="#select"><span>VI</span><span>Choosing Voxels</span></a></li>
+    <li><a href="#commands"><span>VII</span><span>The Big Commands</span></a></li>
+    <li><a href="#scene"><span>VIII</span><span>A Scene of Models</span></a></li>
+    <li><a href="#looks"><span>IX</span><span>Looks and Light</span></a></li>
+    <li><a href="#shaders"><span>X</span><span>Shaders</span></a></li>
+    <li><a href="#bricks"><span>XI</span><span>Bricks</span></a></li>
+    <li><a href="#animate"><span>XII</span><span>Making It Move</span></a></li>
+    <li><a href="#files"><span>XIII</span><span>Files</span></a></li>
+    <li><a href="#keys"><span>XIV</span><span>Every Key</span></a></li>
+    <li><a href="#machines"><span>XV</span><span>Rok and the Machines</span></a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <div>
+    <h1>The Rok <em>Manual</em></h1>
+    <p class="lede">A voxel editor, explained chapter by chapter. <b>Every part of the window, every tool and every key.</b></p>
+  </div>
+</header>
+<div class="colophon">
+  <span>Rok runs on macOS.</span><span>The keys are Mac keys: <kbd>⌘</kbd> Command, <kbd>⌥</kbd> Option, <kbd>⌃</kbd> Control.</span>
+</div>
+
+<!-- I -->
+<section class="ch" id="hello">
+  <div class="col">
+  <div class="chno">Chapter I</div>
+  <h2>Hello</h2>
+  <p class="inwhich">In which you learn what a voxel is, and are asked to stay.</p>
+
+
+  <p>A voxel is a cube. That is the whole idea. You put cubes next to other cubes, and after a while there is a bird, or a house, or a car. Rok is the program where you do that.</p>
+  <p>This book walks you through the program in the order you will meet things: the window, the first cube, moving the camera, colours, and then the larger machinery. You do not have to read it in order. Nobody checks.</p>
+
+
+  <h3>What Rok is</h3>
+  <ul>
+    <li>A voxel editor. You open a <code>.vox</code> file, change it cube by cube, and save it as <code>.vox</code> again.</li>
+    <li>A scene editor. Several models live together, you move them, copy them, cut them, and line them up.</li>
+    <li>A small render studio. The viewport has twelve looks, and a path tracer makes finished pictures.</li>
+    <li>An animation tool. Parts turn and swing, frames flip, and the result goes out as glTF, a sprite sheet, a GIF or an MP4.</li>
+    <li>A brick kit. Turn a model into bricks and build on it, brick by brick.</li>
+  </ul>
+  <p>Rok is its own app. There is no other 3D program behind it. Rust draws and Python thinks.</p>
+  </div>
+</section>
+
+<!-- II -->
+<section class="ch" id="window">
+  <div class="col">
+  <div class="chno">Chapter II</div>
+  <h2>The Window</h2>
+  <p class="inwhich">In which the parts of the screen are named, so that the rest of the book can point at them.</p>
+  <p>Start Rok and the welcome screen opens. It has two buttons. Press <kbd>N</kbd> for a new model, <kbd>O</kbd> to open a file, or <kbd>Esc</kbd> to start with an empty 32 × 32 × 32 model and no questions. The recent files sit on the right once you have some.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/welcome.webp" alt="The welcome screen: the Rok logo and name, with New and Open buttons and an empty recent-files list">
+      <span class="pin" style="--x:36.4%;--y:53.6%">1</span>
+      <span class="pin" style="--x:36.4%;--y:62.4%">2</span>
+      <span class="pin" style="--x:54.4%;--y:52.0%">3</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>New…</b> opens the grid-size dialog. <kbd>N</kbd> does the same.</span></li>
+      <li><i>2</i><span><b>Open…</b> takes a <code>.vox</code> or a <code>.rok</code> file. <kbd>O</kbd> does the same.</span></li>
+      <li><i>3</i><span><b>Recent</b> lists the last files you had open. Click one.</span></li>
+    </ol>
+  </figure>
+
+  <div class="col">
+  <p>The New dialog offers sizes with names. Pick one, or type your own three numbers. A model can be as small as an icon (16 × 16 × 16) and as large as a whole scene (256 × 256 × 128). Start small. Small models are finished more often.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/new_dialog.webp" alt="The New dialog with named sizes from Icon to Huge and three size fields"></div>
+    <figcaption>Icon, Small, Medium, Large, Character, Vehicle, Tile, Room, Scene, Huge. Or type the numbers.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>The window, labelled</h3>
+  <p>Here is the whole window with a model open. The bird is one of the test models that come with Rok.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/window.webp" alt="The main window: a tool rail on the left, the red voxel bird in a wireframe box in the middle, the nav cube and view buttons on the right, the palette card bottom left">
+      <span class="pin" style="--x:1.85%;--y:7.3%">1</span>
+      <span class="pin" style="--x:1.85%;--y:17.9%">2</span>
+      <span class="pin" style="--x:1.85%;--y:48.6%">3</span>
+      <span class="pin" style="--x:1.85%;--y:56.4%">4</span>
+      <span class="pin" style="--x:1.85%;--y:93.5%">5</span>
+      <span class="pin" style="--x:7.1%;--y:2.8%">6</span>
+      <span class="pin" style="--x:8.8%;--y:53%">7</span>
+      <span class="pin" style="--x:13.1%;--y:79%">8</span>
+      <span class="pin" style="--x:93.8%;--y:11.5%">9</span>
+      <span class="pin" style="--x:93.7%;--y:27.9%">10</span>
+      <span class="pin" style="--x:50%;--y:98%">11</span>
+      <span class="pin" style="--x:46%;--y:22%">12</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>The level switch.</b> Model, Scene, Animate. <kbd>Tab</kbd> cycles them. Chapter VIII and XII.</span></li>
+      <li><i>2</i><span><b>The four tools.</b> Attach, Erase, Paint, Select. Hover a tool for its modes.</span></li>
+      <li><i>3</i><span><b>Model.</b> The whole-model commands: mirror half, hollow, lathe, twist, cage, and more. Chapter VII.</span></li>
+      <li><i>4</i><span><b>Layers.</b> Show, hide and pick the layers your models sit on.</span></li>
+      <li><i>5</i><span><b>Stroke and Size.</b> The brush size, and above it the Stroke Designer.</span></li>
+      <li><i>6</i><span><b>The grid size.</b> This bird lives in 80 × 68 × 22 cells.</span></li>
+      <li><i>7</i><span><b>The readout.</b> The tool, its mode, and what a click does right now.</span></li>
+      <li><i>8</i><span><b>The palette card.</b> The current colour, the colours in use, and the rest. Chapter V.</span></li>
+      <li><i>9</i><span><b>The nav cube.</b> Click a face to look from that side. Section and Mirror sit on its rim.</span></li>
+      <li><i>10</i><span><b>The view buttons.</b> Centre, Quad, Pan, Zoom, Rendered view, Steady Hand.</span></li>
+      <li><i>11</i><span><b>The hint line.</b> It always tells you what the mouse and each modifier key do now. Read it when lost.</span></li>
+      <li><i>12</i><span><b>The model box.</b> The faint edges of the grid. Voxels live inside; nothing lives outside.</span></li>
+    </ol>
+  </figure>
+
+
+  <div class="col">
+  <h3>The three levels</h3>
+  <p>Rok has three levels, and the rail changes colour with them.</p>
+  <ul>
+    <li><b>Model</b> is where you place voxels. One model, four tools, the grid.</li>
+    <li><b>Scene</b> is where models are things. You pick them, drag them, copy them, cut them.</li>
+    <li><b>Animate</b> is where parts move. A timeline opens along the bottom.</li>
+  </ul>
+  <p><kbd>Tab</kbd> steps to the next level. <kbd>Enter</kbd> steps into the picked model. <kbd>Esc</kbd> first drops the selection, then steps out to the scene. Brick mode is a fourth way of working inside a model; it has its own chapter.</p>
+  </div>
+</section>
+
+<!-- III -->
+<section class="ch" id="first">
+  <div class="col">
+  <div class="chno">Chapter III</div>
+  <h2>Your First Voxel</h2>
+  <p class="inwhich">In which cubes are placed, removed and painted, and the ghost is explained.</p>
+  <p>Pick Attach (<kbd>T</kbd>). Move the mouse over the model. A pale cube follows the pointer: the ghost. It shows exactly where the next voxel goes, on the face you point at. Click, and the ghost becomes a voxel. Drag, and it becomes many.</p>
+  </div>
+
+  <div class="pair">
+    <figure><img src="img/ghost_attach.webp" alt="A white ghost cube on the bird's back under the mouse"><figcaption>Attach: the ghost sits on the face under the mouse. Click to keep it.</figcaption></figure>
+    <figure><img src="img/ghost_erase.webp" alt="Erase: the readout turns red and says Erasing"><figcaption>Hold <kbd>⌥</kbd> and the same click erases. The readout turns red so you notice.</figcaption></figure>
+  </div>
+
+  <div class="col">
+  <p>You do not need to switch tools for the common things.</p>
+  <ul>
+    <li><kbd>⌥</kbd> + click erases, with any tool.</li>
+    <li><kbd>Shift</kbd> + click paints the current colour onto the voxel.</li>
+    <li><kbd>⌘</kbd><kbd>Z</kbd> undoes. Every stroke is one step. Undo goes back 64 steps and never asks why.</li>
+  </ul>
+  <p>The four tools, with their keys: Attach <kbd>T</kbd>, Erase <kbd>R</kbd>, Paint <kbd>G</kbd>, Select <kbd>Z</kbd>.</p>
+
+  <h3>Modes</h3>
+  <p>Hover a tool button and a row of modes slides out. A mode decides what one click or drag means.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/attach_flyout.webp" alt="The Attach flyout: Voxel, Face, Box, Line, Center, Pattern and the Primitives button">
+      <span class="pin" style="--x:5.3%;--y:17.9%">1</span>
+      <span class="pin" style="--x:8.05%;--y:17.9%">2</span>
+      <span class="pin" style="--x:10.75%;--y:17.9%">3</span>
+      <span class="pin" style="--x:13.5%;--y:17.9%">4</span>
+      <span class="pin" style="--x:16.25%;--y:17.9%">5</span>
+      <span class="pin" style="--x:19%;--y:17.9%">6</span>
+      <span class="pin" style="--x:21.75%;--y:17.9%">7</span>
+      <span class="pin" style="--x:24.4%;--y:17.9%">8</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>Voxel</b> <kbd>V</kbd>: one cube per click, a trail per drag.</span></li>
+      <li><i>2</i><span><b>Face</b> <kbd>F</kbd>: the whole flat face under the mouse, raised by one.</span></li>
+      <li><i>3</i><span><b>Box</b> <kbd>B</kbd>: drag a rectangle on a face, then pull it up to a height.</span></li>
+      <li><i>4</i><span><b>Line</b> <kbd>L</kbd>: a straight run of voxels from here to there.</span></li>
+      <li><i>5</i><span><b>Center</b> <kbd>C</kbd>: a box that grows from its middle.</span></li>
+      <li><i>6</i><span><b>Pattern</b> <kbd>P</kbd>: stamp the cluster you copied; add it, carve it, or punch holes.</span></li>
+      <li><i>7</i><span><b>Clone</b>: stamp the copied cluster with its own colours.</span></li>
+      <li><i>8</i><span><b>Primitives</b>: spheres, cones, stairs, gears and a tower. Twenty-three shapes, each a drag.</span></li>
+    </ol>
+  </figure>
+
+  <div class="pair">
+    <figure><img src="img/mode_face.webp" alt="Face mode: a yellow ring marks the flat face on the bird's back"><figcaption>Face mode lights the face it would raise.</figcaption></figure>
+    <figure><img src="img/mode_box.webp" alt="Box mode: a green box dragged along the wing, labelled 40 by 3"><figcaption>Box mode shows the size while you drag: 40 × 3.</figcaption></figure>
+  </div>
+
+
+  <div class="col">
+  <h3>Primitives</h3>
+  <p>The last button of the Attach row opens the shapes. Drag a box on a face and the shape fills it: Sphere, Dome, Buckyball, Capsule, Pyramid, Cone, Diamond, prisms, Tube, Wedge, Roof, Stairs, Torus, Rock, Hill, Gear, Spiral Ramp, Tower. Rock and Hill are different on every drag. Most shapes can be hollow.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/primitives_flyout.webp" alt="The primitives grid open beside the Attach flyout: twenty-two small shape icons"></div>
+    <figcaption>Twenty-three shapes. The Buckyball has 32 flat faces. Cut it in half and you have a canopy.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>Size, and the shape of a stroke</h3>
+  <p>The Size field at the bottom of the rail is the brush: a ball of voxels. Drag the number left or right. Above it, the wavy button opens the Stroke Designer, where a stroke can start thick and end thin, go round or square, and change colour along the way.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/stroke_designer.webp" alt="The Stroke panel with curves for Thickness, Roundness and Colour along the stroke"></div>
+    <figcaption>The Stroke Designer. Drag the curves. A stroke that tapers is a tail; a stroke that fades is a flame.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>Steady Hand</h3>
+  <p>Press <kbd>H</kbd> and the brush follows the mouse on a string. Fast wobbles do not reach the model; slow moves do. A white line shows the string while it is taut. The button under the nav cube does the same, and the string's length is in Rok › Settings.</p>
+
+  <div class="note"><p><b>Mirror.</b> The Mirror button on the rim of the nav cube opens X, Y and Z. Turn one on and every voxel you place appears on the other side too. Chapter VI shows it.</p></div>
+  </div>
+</section>
+
+<!-- IV -->
+<section class="ch" id="around">
+  <div class="col">
+  <div class="chno">Chapter IV</div>
+  <h2>Moving Around</h2>
+  <p class="inwhich">In which the camera is turned, pushed and pulled, with the trackpad, the mouse and the keys.</p>
+
+  <h3>With a trackpad</h3>
+  <ul>
+    <li><b>Two fingers</b> orbit around the model.</li>
+    <li><kbd>⌃</kbd> + two fingers pan.</li>
+    <li><kbd>⌥</kbd> + two fingers zoom. A pinch zooms too.</li>
+  </ul>
+  <h3>With a mouse</h3>
+  <ul>
+    <li>Hold <kbd>⌃</kbd> and move: orbit.</li>
+    <li>Hold <kbd>⌘</kbd> and move: pan.</li>
+    <li>Hold <kbd>⌥</kbd> and move: zoom. The wheel zooms too.</li>
+  </ul>
+  <p>Hold the key alone, with no click. The view follows the mouse until you let go. Nothing happens on the middle button, on purpose.</p>
+  <h3>With the keys</h3>
+  <p><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> fly the view, <kbd>Q</kbd> and <kbd>E</kbd> go down and up. The keys are for the camera. The arrows are for a cursor, see Chapter VI.</p>
+
+  <h3>The nav cube</h3>
+  <p>The cube in the top right turns with the camera. Click a face to look straight at it, near an edge to look along both faces, near a corner to look from the corner. The view glides there. Drag the cube to orbit.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/window.webp" alt="The window again, with the nav cube and its buttons marked">
+      <span class="pin" style="--x:90.5%;--y:5.7%">1</span>
+      <span class="pin" style="--x:97%;--y:5.7%">2</span>
+      <span class="pin" style="--x:92.4%;--y:22.8%">3</span>
+      <span class="pin" style="--x:95.1%;--y:22.8%">4</span>
+      <span class="pin" style="--x:92.4%;--y:27.9%">5</span>
+      <span class="pin" style="--x:95.1%;--y:27.9%">6</span>
+      <span class="pin" style="--x:92.4%;--y:32.9%">7</span>
+      <span class="pin" style="--x:95.1%;--y:32.9%">8</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>Section.</b> Opens X, Y, Z. A section plane cuts the model open so you can work inside.</span></li>
+      <li><i>2</i><span><b>Mirror.</b> Opens X, Y, Z. Every stroke appears on both sides of the plane.</span></li>
+      <li><i>3</i><span><b>Centre.</b> Frames everything; click again to frame the model.</span></li>
+      <li><i>4</i><span><b>Quad.</b> Four views at once: top, front, right and perspective.</span></li>
+      <li><i>5</i><span><b>Pan</b> and <i>6</i> <b>Zoom.</b> Drag on the button. The pointer hides and the view moves.</span></li>
+      <li><i>7</i><span><b>Rendered view.</b> The path tracer takes over the viewport. Chapter IX.</span></li>
+      <li><i>8</i><span><b>Steady Hand.</b> The brush on a string, as in Chapter III.</span></li>
+    </ol>
+  </figure>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/quad.webp" alt="Quad view: top, perspective, front and right views of the bird in four panes"></div>
+    <figcaption>Quad view. Each pane has its own Zoom, Pan and Centre. Click the Quad button again for one view.</figcaption>
+  </figure>
+
+  <div class="col">
+  <p>View › Saved Views keeps four camera positions. Save one with the model from the left, one from behind, and jump between them. Turn the model round often: a hole in its back shows only from behind.</p>
+  </div>
+
+</section>
+
+<!-- V -->
+<section class="ch" id="colours">
+  <div class="col">
+  <div class="chno">Chapter V</div>
+  <h2>Colours</h2>
+  <p class="inwhich">In which the palette card is opened, a colour is mixed, and a star is awarded.</p>
+  <p>The card at the bottom left holds the colours. The big swatch is the current colour: what Attach places and what Paint paints. Under it, <b>In use</b> lists every colour the model has, and <b>Unused</b> the rest of the palette. Click a swatch to make it current. Press <kbd>I</kbd> over a voxel to take its colour.</p>
+  <p>Click the big swatch, or the pen next to it, and the editor slides open.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/colour_popup.webp" alt="The colour editor open above the palette card: a picker square, a hue bar, the Type row, and the current colour with plus, pen and star buttons">
+      <span class="pin" style="--x:12.5%;--y:50.5%">1</span>
+      <span class="pin" style="--x:19.9%;--y:50.5%">2</span>
+      <span class="pin" style="--x:13%;--y:66.5%">3</span>
+      <span class="pin" style="--x:7%;--y:74.5%">4</span>
+      <span class="pin" style="--x:15.9%;--y:75.8%">5</span>
+      <span class="pin" style="--x:17.8%;--y:75.8%">6</span>
+      <span class="pin" style="--x:19.7%;--y:75.8%">7</span>
+      <span class="pin" style="--x:13.1%;--y:84.2%">8</span>
+      <span class="pin" style="--x:13.1%;--y:93.5%">9</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>The picker.</b> Drag for lightness and saturation.</span></li>
+      <li><i>2</i><span><b>The hue bar.</b> Drag for the hue.</span></li>
+      <li><i>3</i><span><b>Type.</b> Plain, Metal, Glass, Light or Plastic. Light glows in the Night look and in renders.</span></li>
+      <li><i>4</i><span><b>The current colour</b>, with its hex value and how many voxels wear it.</span></li>
+      <li><i>5</i><span><b>+</b> makes a new white colour in a free slot. It never touches the others.</span></li>
+      <li><i>6</i><span><b>The pen</b> opens the picker for the current colour. Change it, and every voxel that wears it changes too.</span></li>
+      <li><i>7</i><span><b>The star</b> makes it a favourite. Favourites get a section of their own.</span></li>
+      <li><i>8</i><span><b>In use.</b> The model's colours, in the order you made them.</span></li>
+      <li><i>9</i><span><b>Unused.</b> The rest of the 256 slots. A <code>.vox</code> always has 256.</span></li>
+    </ol>
+  </figure>
+
+
+  <div class="col">
+  <h3>Paint</h3>
+  <p>Paint (<kbd>G</kbd>) gives voxels the current colour without moving them. Its modes include a gradient between two colours, with steps and dither. Shift+<kbd>F</kbd> fills every connected voxel of one colour. Shift+<kbd>P</kbd> paints the whole selection.</p>
+  <h3>Palettes as files</h3>
+  <p>File › Export Palette writes the favourites, the used or the unused colours as a small file. Import Palette reads one back and adds its colours as favourites. Edit › Clean Up Palette drops the colours no voxel wears.</p>
+  </div>
+</section>
+
+<!-- VI -->
+<section class="ch" id="select">
+  <div class="col">
+  <div class="chno">Chapter VI</div>
+  <h2>Choosing Voxels</h2>
+  <p class="inwhich">In which some voxels are selected and the rest are left in peace; also the section plane, the mirror and the mask.</p>
+  <p>Select (<kbd>Z</kbd>) marks voxels. A selection turns gold, and a slim bar of buttons appears above it: the things you can do to exactly these voxels. Move them with the gizmo in the corner, delete them, copy them, bevel them, smooth them.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/selection.webp" alt="The whole bird selected in gold, a bar of buttons above it and a small gizmo in the bottom right">
+      <span class="pin" style="--x:49.2%;--y:14.4%">1</span>
+      <span class="pin" style="--x:94%;--y:87%">2</span>
+      <span class="pin" style="--x:8.8%;--y:53%">3</span>
+      <span class="pin" style="--x:1.85%;--y:96%">4</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>The selection bar.</b> Each button acts on the selected voxels only.</span></li>
+      <li><i>2</i><span><b>The gizmo.</b> Drag a ring to turn the selection, an arrow to move it. It changes the real voxels, live.</span></li>
+      <li><i>3</i><span><b>The readout</b> says the mode and what a click does; the hint line counts the selected voxels.</span></li>
+      <li><i>4</i><span><b>Visible.</b> Take only the voxels you can see, not the ones behind or inside.</span></li>
+    </ol>
+  </figure>
+
+  <div class="col">
+  <h3>Ways to select</h3>
+  <ul>
+    <li><b>Voxel</b>, <b>Face</b>, <b>Box</b>: like Attach's modes, but marking.</li>
+    <li><b>Marquee</b> <kbd>M</kbd> drags a rectangle on the screen, <b>Lasso</b> <kbd>O</kbd> draws a loop.</li>
+    <li>Shift+<kbd>C</kbd> adds every voxel of the same colour; the Tolerance slider takes close colours too.</li>
+    <li>Shift+<kbd>L</kbd> adds everything joined to the voxel under the mouse.</li>
+    <li><kbd>⌘</kbd><kbd>A</kbd> all, <kbd>⌘</kbd><kbd>I</kbd> invert, <kbd>⌘</kbd><kbd>+</kbd> and <kbd>⌘</kbd><kbd>-</kbd> grow and shrink.</li>
+    <li>The <b>Visible</b> chip takes only the voxels you can see, not the ones inside.</li>
+    <li><kbd>⌃</kbd> + a number saves the selection in a slot; the number alone brings it back.</li>
+  </ul>
+  <p><kbd>⌘</kbd><kbd>C</kbd>, <kbd>⌘</kbd><kbd>X</kbd> and <kbd>⌘</kbd><kbd>V</kbd> copy, cut and paste. <kbd>⌘</kbd><kbd>Shift</kbd><kbd>V</kbd> pastes mirrored. <kbd>Esc</kbd> deselects.</p>
+
+  <h3>The mask</h3>
+  <p>Shift+<kbd>M</kbd> turns the selection into a mask. Masked voxels are safe: no tool and no command changes them until <kbd>⌥</kbd><kbd>M</kbd> clears the mask. A chip on the rail shows the mask while it is on.</p>
+
+  <h3>The section plane</h3>
+  <p>A model is solid, and the inside is hard to reach. <kbd>Page Down</kbd> lowers a plane through it, layer by layer; <kbd>Page Up</kbd> raises it. Everything above the plane is hidden, and your tools work on the layer you see. The Section button on the nav cube's rim picks the axis.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/section.webp" alt="The bird cut open by a horizontal section plane; the top of the body is hidden"></div>
+    <figcaption>The section plane at layer 16. The body opens like a cake. Nobody eats it.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>The mirror</h3>
+  <p>Open Mirror on the rim, click X, and a plane stands in the model. Every voxel you place or erase has a twin on the other side. Symmetric things, like wings, come out symmetric. A Cage bend (Chapter VII) mirrors too.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/mirror_ghost.webp" alt="A faint mirror plane cuts the bird in half along its length; the Mirror button on the nav cube is lit"></div>
+    <figcaption>Mirror X on. The plane shows faintly; the X on the nav cube's rim is lit.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>A cursor on the keys</h3>
+  <p>The arrow keys step a cursor from cell to cell on the floor, as the view shows it. <kbd>Shift</kbd>+<kbd>↑</kbd> and <kbd>Shift</kbd>+<kbd>↓</kbd> step a layer. <kbd>Return</kbd> clicks at the cursor with the current tool, <kbd>⌥</kbd><kbd>Return</kbd> option-clicks. Move the mouse and the mouse has the cursor back.</p>
+  </div>
+
+</section>
+
+<!-- VII -->
+<section class="ch" id="commands">
+  <div class="col">
+  <div class="chno">Chapter VII</div>
+  <h2>The Big Commands</h2>
+  <p class="inwhich">In which whole models are mirrored, hollowed, turned on a lathe and bent in a cage, and two quick menus are revealed.</p>
+  <p>Hover the Model button on the rail and the most used whole-model commands fold out. The rest, like Hollow, Bevel, Lathe and Twist, are a <kbd>⌘</kbd><kbd>K</kbd> away. Each one acts on the model, or on the selection when there is one, and most open a small dialog with a live preview.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/model_flyout.webp" alt="The Model flyout open: a grid of command icons next to the rail"></div>
+    <figcaption>The Model flyout. View › Customize Rail Menu and Keys… picks which commands live here and gives them keys.</figcaption>
+  </figure>
+
+  <div class="col">
+  <div class="tbl"><table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td>Mirror Half</td><td>Copies one half of the model onto the other, mirrored. Hover a choice to see it.</td></tr>
+    <tr><td>Hollow</td><td>Empties the inside. The walls stay. The file gets smaller and nobody can tell.</td></tr>
+    <tr><td>Grow / Shrink</td><td>Adds or removes a layer of voxels all round.</td></tr>
+    <tr><td>Bevel</td><td>Takes one voxel off every convex edge.</td></tr>
+    <tr><td>Smooth</td><td>Corners and bumps go, dents fill.</td></tr>
+    <tr><td>Lathe</td><td>Spins what you drew round the centre line. A profile becomes a vase.</td></tr>
+    <tr><td>Twist</td><td>Each layer turns a little more than the one below.</td></tr>
+    <tr><td>Loop</td><td>Shifts the voxels along an axis; they wrap round at the edge.</td></tr>
+    <tr><td>Repeat</td><td>Tiles the model along each axis.</td></tr>
+    <tr><td>Scale</td><td>Doubles or halves the resolution.</td></tr>
+    <tr><td>Rotate by degrees</td><td>Turns the model or the selection by any angle you type.</td></tr>
+    <tr><td>Resize, Fit Grid</td><td>Changes the grid, or shrinks it to the voxels.</td></tr>
+    <tr><td>Drop Voxels</td><td>Every selected voxel falls on its own until it lands. Sand, rubble, snow.</td></tr>
+    <tr><td>Crease</td><td>Finds the flat faces and raises bars on the sharp edges between them.</td></tr>
+    <tr><td>Cage</td><td>A lattice of points round the selection. Drag a point and the voxels bend.</td></tr>
+    <tr><td>Convert to Bricks</td><td>Every voxel becomes a brick. Chapter XI.</td></tr>
+  </table></div>
+
+  <h3>The cage</h3>
+  <p>Select some voxels, run Cage, and a lattice of orange points surrounds them. Drag a point: the real voxels bend with it, live. The chip row sets how many points per axis, locks an axis, and makes the bend soft. Done keeps it, Reset starts over.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/cage.webp" alt="The whole bird selected inside an orange lattice of cage points, with a chip row: Points, Lock X, Lock Y, Lock Z, Soft, Reset, Done"></div>
+    <figcaption>The cage round the whole bird. Drag a wing-tip point and the wing bends.</figcaption>
+  </figure>
+
+
+  <div class="col">
+  <h3>The star</h3>
+  <p>Hold <kbd>Space</kbd> and a star opens under the pointer: an arm per tool, with its modes as chips, and arms for the whole-model commands, the shaders and the last command. Slide onto a chip and let go. Let go in the middle to cancel. View › Star switches it to pick on click instead.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/star.webp" alt="The star open under the pointer: green Attach, red Erase, yellow Paint, blue Select and violet Model arms"></div>
+    <figcaption>The star. Hold Space long enough with a still hand and the arms start to play with each other. This is not a bug.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>The command palette</h3>
+  <p><kbd>⌘</kbd><kbd>K</kbd> opens a search over every command. Type a few letters, press <kbd>Return</kbd>. Commands with choices, like Mirror Half, list each choice as its own line.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/command_palette.webp" alt="The command palette with 'mirr' typed and Mirror Half choices listed"></div>
+    <figcaption>Type <code>mirr</code>, get every mirror. Also the Mountains shader, which sounds a bit like it.</figcaption>
+  </figure>
+</section>
+
+<!-- VIII -->
+<section class="ch" id="scene">
+  <div class="col">
+  <div class="chno">Chapter VIII</div>
+  <h2>A Scene of Models</h2>
+  <p class="inwhich">In which more than one model lives in the window, and they are picked, moved, copied, cut and lined up.</p>
+  <p>Press <kbd>Tab</kbd> and the rail turns blue: the Scene level. Models are now things. Click one to pick it, drag it to move it, drag the dots on its frame to stretch it. Double-click, or press <kbd>Enter</kbd>, to step inside and edit its voxels. <kbd>Esc</kbd> steps out again.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/scene.webp" alt="Scene level: the bird in a red frame with a gizmo at its centre; the rail is blue">
+      <span class="pin" style="--x:1.85%;--y:17.9%">1</span>
+      <span class="pin" style="--x:1.85%;--y:48.6%">2</span>
+      <span class="pin" style="--x:1.85%;--y:57.5%">3</span>
+      <span class="pin" style="--x:48%;--y:42%">4</span>
+      <span class="pin" style="--x:38.5%;--y:22%">5</span>
+      <span class="pin" style="--x:50%;--y:98%">6</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>Pick</b> and, under it, <b>Cut</b> <kbd>C</kbd>: click a model and a plane slices it in two. <kbd>Tab</kbd> turns the plane.</span></li>
+      <li><i>2</i><span><b>New.</b> An empty model, one from a file, a terrain, a heightmap from a picture, or any primitive.</span></li>
+      <li><i>3</i><span><b>Tools.</b> Drop, Fit, Flip, Pick Linked, Align, Array, Carve, Delete.</span></li>
+      <li><i>4</i><span><b>The gizmo.</b> Arrows move, rings turn by any angle, the centre drags freely.</span></li>
+      <li><i>5</i><span><b>The frame.</b> The picked model's box in red. Drag its dots to stretch the model.</span></li>
+      <li><i>6</i><span><b>The hint line</b> lists the scene keys. There are many. They are all here.</span></li>
+    </ol>
+  </figure>
+
+  <div class="pair">
+    <figure><img src="img/new_flyout.webp" alt="The New flyout: Empty, From file, Terrain, Heightmap and the grid of primitives"><figcaption>New: click a shape and a model of that shape appears next to the scene. Drag it to where you want it.</figcaption></figure>
+    <figure><img src="img/scene_tools_flyout.webp" alt="The Tools flyout: Drop, Drop onto, Fit, Flip, Pick Linked, Align, Array, Carve, Delete"><figcaption>Tools: Drop to the floor, Fit the grid, Flip, Align, Array, Carve.</figcaption></figure>
+  </div>
+
+  <div class="col">
+  <h3>The scene keys</h3>
+  <ul>
+    <li><kbd>G</kbd> drops the picked models to the floor; <kbd>Shift</kbd><kbd>G</kbd> drops them onto the first voxel below.</li>
+    <li><kbd>R</kbd> turns a quarter turn, <kbd>Shift</kbd><kbd>R</kbd> back.</li>
+    <li>The arrows nudge by one cell, <kbd>Shift</kbd> + arrows by ten.</li>
+    <li><kbd>⌥</kbd> + drag makes a copy. <kbd>⌃</kbd> + drag carves the dragged model out of the ones it crosses.</li>
+    <li><kbd>⌘</kbd><kbd>J</kbd> merges the picked models into one. <kbd>Delete</kbd> removes them.</li>
+    <li><kbd>F</kbd> frames the picked model.</li>
+  </ul>
+  <h3>Linked copies</h3>
+  <p>A copy made with <kbd>⌥</kbd> + drag is linked: edit one and every copy changes. A chain on its row in the Layers list says so. Click the chain to make it unique. Ten windows in a wall want to be linked. Ten trees do not; each wants to be its own.</p>
+  <h3>Layers</h3>
+  <p>The Layers button opens a list. Each model sits on a layer; a layer can be hidden or shown with its eye. The list also shows which model is active.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/car_scene.webp" alt="A blue voxel car picked in the scene, with its gizmo and red frame"></div>
+    <figcaption>Another test model, picked. The car does not know it is in a manual.</figcaption>
+  </figure>
+
+</section>
+
+<!-- IX -->
+<section class="ch" id="looks">
+  <div class="col">
+  <div class="chno">Chapter IX</div>
+  <h2>Looks and Light</h2>
+  <p class="inwhich">In which the viewport changes its clothes twelve times, the room gets brighter, and the path tracer makes a picture.</p>
+  <p>View › View Settings opens a panel beside the model. Every change shows at once. The Look row is the big one: how the voxels are lit and drawn while you edit.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/view_settings.webp" alt="The View Settings panel with the twelve looks as chips, and switches for Ambient Occlusion, Smooth Edges and Model Box"></div>
+    <figcaption>View Settings: the looks, ambient occlusion, smooth edges, the model box.</figcaption>
+  </figure>
+
+  <div class="looks">
+    <figure><img src="img/look_studio.webp" alt="The bird in the Studio look"><figcaption><b>Studio</b> <span>· the default; a key light and a fill</span></figcaption></figure>
+    <figure><img src="img/look_iso.webp" alt="Iso look"><figcaption><b>Iso</b> <span>· three clear tones, as in pixel art</span></figcaption></figure>
+    <figure><img src="img/look_soft.webp" alt="Soft look"><figcaption><b>Soft</b> <span>· sky from above, bounce from below</span></figcaption></figure>
+    <figure><img src="img/look_night.webp" alt="Night look"><figcaption><b>Night</b> <span>· moonlight; Light colours glow</span></figcaption></figure>
+    <figure><img src="img/look_ceramic.webp" alt="Ceramic look"><figcaption><b>Ceramic</b> <span>· a glaze with a highlight</span></figcaption></figure>
+    <figure><img src="img/look_plain.webp" alt="Plain look"><figcaption><b>Plain</b> <span>· no extras</span></figcaption></figure>
+    <figure><img src="img/look_sun.webp" alt="Sun look"><figcaption><b>Sun</b> <span>· a fixed sun with shadows</span></figcaption></figure>
+    <figure><img src="img/look_paper.webp" alt="Paper look"><figcaption><b>Paper</b> <span>· pale, for printing</span></figcaption></figure>
+    <figure><img src="img/look_clay.webp" alt="Clay look"><figcaption><b>Clay</b> <span>· one matte material</span></figcaption></figure>
+    <figure><img src="img/look_flat.webp" alt="Flat look"><figcaption><b>Flat</b> <span>· the palette colour, no light</span></figcaption></figure>
+    <figure><img src="img/look_blueprint.webp" alt="Blueprint look"><figcaption><b>Blueprint</b> <span>· lines on blue</span></figcaption></figure>
+    <figure><img src="img/look_toon.webp" alt="Toon look"><figcaption><b>Toon</b> <span>· three bands of light</span></figcaption></figure>
+  </div>
+
+  <div class="col">
+  <p>Rok remembers the look for the next start. View › Theme switches the panels and the rail between Dark and Bright; the model stays the same.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/bright.webp" alt="The Bright theme: pale panels and a light background around the same red bird"></div>
+    <figcaption>The Bright theme. For rooms with windows.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>The rendered view</h3>
+  <p>The sun button under the nav cube hands the viewport to Rok's path tracer. Soft shadows, glass, metal, glowing colours. The view keeps refining while you look; orbit and it starts over. Click the button again to go back to editing.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/rendered.webp" alt="The rendered view: the bird on a grey floor, its orange wing tips glowing and lighting the floor"></div>
+    <figcaption>The rendered view. The wing tips are Light colours, so they light the floor.</figcaption>
+  </figure>
+
+  <div class="col">
+  <p>View › Render Settings opens the same panel for the light: a preset to start from, up to four lights you drag on the dome, the sky, the ground and the finish. The file keeps its light, also a <code>.vox</code>. File › Render Picture (<kbd>⌘</kbd><kbd>R</kbd>) writes a finished PNG next to the file.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/render_settings.webp" alt="The Render Settings panel: a preset, a light dome with draggable lights, sliders for strength, size, turn, height and distance"></div>
+    <figcaption>Render Settings. Drag a light round the dome. The picture follows.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>The CAD view</h3>
+  <p>View › CAD View turns the model into a technical drawing: grey, with the three dimensions written on it. The chips at the top left switch between cells, metres and feet; a voxel's real length is kept with the file. Click an edge to measure it. Hidden shows the hidden edges dotted.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/cad.webp" alt="The CAD view: the bird in grey on white, with dimension lines reading X 80 cells, Y 68 cells, Z 22 cells"></div>
+    <figcaption>The CAD view. 80 by 68 by 22 cells, in writing.</figcaption>
+  </figure>
+
+</section>
+
+<!-- X -->
+<section class="ch" id="shaders">
+  <div class="col">
+  <div class="chno">Chapter X</div>
+  <h2>Shaders</h2>
+  <p class="inwhich">In which the computer builds trees, cliffs and plating, and you take the credit.</p>
+  <p>A shader is a small program that writes voxels. Rok has 46 of them, in the xs format: nature (trees, cliffs, clouds, mushrooms, a volcano), hard surface (plating, windows, greebles), patterns, water and weathering. Shaders › Shader Gallery (<kbd>⌘</kbd><kbd>Shift</kbd><kbd>K</kbd>) opens the gallery.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/shader_gallery.webp" alt="The shader gallery: rows of small voxel thumbnails for Nature, Water and Weathering shaders"></div>
+    <figcaption>The gallery. Click a shader and it runs on the model, or inside the selection.</figcaption>
+  </figure>
+
+  <div class="col">
+  <p>A shader opens a panel with its sliders, and a live preview shows the result before you keep it. The colours a run puts in appear as swatches; change a swatch and the run uses your colour. A shader can stay <b>live</b> on a model: edit the model, and the shader runs again. Shaders › Open Your Shader Folder is where your own xs files go.</p>
+  </div>
+
+</section>
+
+<!-- XI -->
+<section class="ch" id="bricks">
+  <div class="col">
+  <div class="chno">Chapter XI</div>
+  <h2>Bricks</h2>
+  <p class="inwhich">In which a model turns into bricks, and you build on it one brick at a time.</p>
+  <p>Edit › Brick Mode switches it on. The rail gets four brick tools and a bin of bricks opens on the right. A plain voxel model cannot take bricks yet: the Convert chip on the rail turns every voxel into a 1 × 1 brick first. From then on the model is built from bricks, and it stays that way until you convert it back.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/brick_converted.webp" alt="Brick mode: the house with a seam between its bricks, the brick bin on the right, four brick tools on the rail">
+      <span class="pin" style="--x:1.85%;--y:17.9%">1</span>
+      <span class="pin" style="--x:1.85%;--y:24.8%">2</span>
+      <span class="pin" style="--x:1.85%;--y:31.8%">3</span>
+      <span class="pin" style="--x:1.85%;--y:39%">4</span>
+      <span class="pin" style="--x:1.85%;--y:48.6%">5</span>
+      <span class="pin" style="--x:86%;--y:57%">6</span>
+      <span class="pin" style="--x:92%;--y:40%">7</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>Place</b> <kbd>B</kbd>: put the brick in your hand on the model.</span></li>
+      <li><i>2</i><span><b>Pull</b> <kbd>U</kbd>: take a brick out again.</span></li>
+      <li><i>3</i><span><b>Paint</b> <kbd>G</kbd>: give a brick the current colour.</span></li>
+      <li><i>4</i><span><b>Pick</b> <kbd>I</kbd>: take the brick under the mouse into your hand.</span></li>
+      <li><i>5</i><span><b>Convert.</b> Voxels to bricks, or bricks back to voxels.</span></li>
+      <li><i>6</i><span><b>The bin.</b> Fifteen bricks, 1 × 1 to 8 × 8. The keys <kbd>1</kbd> to <kbd>9</kbd> take the first nine.</span></li>
+      <li><i>7</i><span><b>Random colours.</b> Every brick you place gets a colour from a small bright set.</span></li>
+    </ol>
+  </figure>
+
+  <div class="col">
+  <p>Take a brick from the bin and a ghost of it follows the mouse over the model. It snaps to the cells. <kbd>R</kbd> turns it, <kbd>Shift</kbd><kbd>R</kbd> turns it back. A green ghost fits. A red cage means it does not: something is in the way, or it would hang in the air. Click to place. <kbd>Esc</kbd> empties your hand.</p>
+  </div>
+
+  <div class="pair">
+    <figure><img src="img/brick_ghost.webp" alt="A 1 by 3 brick ghost on the roof of the house"><figcaption>A 1 × 3 in the hand. The ghost snaps to the cells.</figcaption></figure>
+    <figure><img src="img/brick_turned.webp" alt="The same brick placed and a second one turned across it"><figcaption>Placed, and the next one turned with <kbd>R</kbd>.</figcaption></figure>
+    <figure><img src="img/brick_random.webp" alt="Random colours on: the bin shows coloured bricks and a red brick is placed"><figcaption>Random colours on. The bin shows what you will get.</figcaption></figure>
+    <figure><img src="img/brick_pull.webp" alt="Pull: a brick on the roof outlined in red, ready to come out"><figcaption>Pull: the brick under the mouse lights up. Click, and it is gone.</figcaption></figure>
+  </div>
+
+  <div class="col">
+  <h3>The lock</h3>
+  <p>A brick model is locked against the voxel tools. Attach, Erase, Paint and every voxel command refuse it, and say why in the readout: build on it in Brick mode, or convert it to voxels. The scene can still move it and turn it about the up axis, but it will not flip it, stretch it or cut it. Bricks do not bend. That is the point of bricks.</p>
+  <p>The bricks are saved with the model in a <code>.rok</code> file. A <code>.vox</code> keeps the voxels and forgets the bricks.</p>
+  </div>
+
+</section>
+
+<!-- XII -->
+<section class="ch" id="animate">
+  <div class="col">
+  <div class="chno">Chapter XII</div>
+  <h2>Making It Move</h2>
+  <p class="inwhich">In which parts get a timeline, a walk is played, and the whole thing goes out as a sprite sheet.</p>
+  <p>Animation works on <b>parts</b>. In the Scene level, select the voxels of a limb and run Make Part: they become a part of their own that follows the model. Then <kbd>Tab</kbd> to the Animate level. The rail turns violet, a timeline opens along the bottom, and the gizmo now poses parts instead of moving them.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/animate.webp" alt="The Animate level: a blocky figure with a gizmo on its body, and a timeline with a Walk clip, rows for Body, legs, arms and Head, and keys on the rows">
+      <span class="pin" style="--x:7.2%;--y:67.6%">1</span>
+      <span class="pin" style="--x:8.8%;--y:71.4%">2</span>
+      <span class="pin" style="--x:19%;--y:71.4%">3</span>
+      <span class="pin" style="--x:52%;--y:78%">4</span>
+      <span class="pin" style="--x:77.5%;--y:71.4%">5</span>
+      <span class="pin" style="--x:89.6%;--y:71.4%">6</span>
+      <span class="pin" style="--x:95.3%;--y:71.4%">7</span>
+      <span class="pin" style="--x:1.85%;--y:19.3%">8</span>
+    </div>
+    <ol class="legend">
+      <li><i>1</i><span><b>Clips.</b> This file has a Walk. <b>+</b> adds another clip.</span></li>
+      <li><i>2</i><span><b>Play</b>, rewind, Loop. <kbd>Shift</kbd><kbd>Space</kbd> plays too.</span></li>
+      <li><i>3</i><span><b>The frame</b>, the length in seconds, and the frame rate.</span></li>
+      <li><i>4</i><span><b>Rows</b>, one per part, with a diamond at every key. Drag the red head to scrub.</span></li>
+      <li><i>5</i><span><b>Easing.</b> Hold, Linear, Smooth, In, Out for the picked keys.</span></li>
+      <li><i>6</i><span><b>Onion</b> skins show the poses before and after.</span></li>
+      <li><i>7</i><span><b>Voxel look</b> snaps the poses to whole voxels while you work.</span></li>
+      <li><i>8</i><span><b>Motion.</b> A gallery of ready-made motions for the picked part: a spin, a swing and more.</span></li>
+    </ol>
+  </figure>
+
+  <div class="col">
+  <p>Drag a ring or an arrow of the gizmo and, when you let go, the pose is keyed at the current frame. <kbd>K</kbd> keys the pose by hand. <kbd>,</kbd> and <kbd>.</kbd> step a frame; with <kbd>Shift</kbd> they jump to the next key. <kbd>Delete</kbd> removes a key.</p>
+  <p>A part can also have <b>frames</b>: whole voxel pictures that flip, like a blinking face. Paint them in the Animate level with Attach, Erase and Paint. A colour can move too: a track gives one palette colour a motion of its own.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/playing.webp" alt="The walk playing at frame 3: the legs swing and the playhead has moved along the timeline"></div>
+    <figcaption>Frame 3 of 19. The legs are on their way. View › Show Animation Menu adds an Animation button to the rail with Make Part and friends.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>Out of the door</h3>
+  <p>File › Export Animation writes the clips as glTF (parts that turn, or every frame baked as voxels), as a <code>.vox</code> with frames, as a sprite sheet with Aseprite JSON, as a GIF, or as an MP4. The MP4 needs ffmpeg.</p>
+  <p>A scene with animation saves as a <code>.rok</code> file, because a <code>.vox</code> has no place for it.</p>
+  </div>
+
+</section>
+
+<!-- XIII -->
+<section class="ch" id="files">
+  <div class="col">
+  <div class="chno">Chapter XIII</div>
+  <h2>Files</h2>
+  <p class="inwhich">In which two file formats are explained, the history is scrubbed, and a crash is survived.</p>
+  <h3>Two formats</h3>
+  <ul>
+    <li><b><code>.vox</code></b> is the common voxel format. Rok reads and writes it, with the palette, the models of a scene, and the light in a chunk that other programs skip. Most other voxel programs open it.</li>
+    <li><b><code>.rok</code></b> is Rok's own file: a zip with a <code>scene.vox</code> inside and a <code>rok.json</code> next to it. It keeps what a <code>.vox</code> cannot: animation, bricks, live shaders, linked copies and the colour store. Unzip it and any <code>.vox</code> reader opens the scene.</li>
+  </ul>
+  <p>Rok picks the right one. When a scene needs the Rok file, Save As says so and says why.</p>
+
+  <h3>Export</h3>
+  <ul>
+    <li><b>Export Mesh</b> (<kbd>⌘</kbd><kbd>E</kbd>) writes GLB, OBJ or PLY for game engines. <b>Merge faces</b> joins neighbouring faces of one colour into rectangles, for three to ten times fewer triangles.</li>
+    <li><b>Export Animation</b>: Chapter XII.</li>
+    <li><b>Render Picture</b> (<kbd>⌘</kbd><kbd>R</kbd>): a finished PNG with the file's light.</li>
+    <li><b>Export Palette</b>: the colours as a small file.</li>
+  </ul>
+
+  <h3>The history strip</h3>
+  <p><kbd>⌘</kbd><kbd>L</kbd> shows a strip along the bottom: the steps since the file was opened, up to the last 64. Drag along it and the model goes back and forth in time. Let go where you like it.</p>
+  </div>
+
+  <figure class="shot">
+    <div class="frame"><img src="img/history_strip.webp" alt="The history strip along the bottom of the window with a few dots and the label Deselect"></div>
+    <figcaption>The history strip. Drag to any point. Nothing is lost until you edit from there.</figcaption>
+  </figure>
+
+  <div class="col">
+  <h3>Recovery</h3>
+  <p>Rok keeps a recovery copy of the open file while you work. If the app or the Mac goes down, the next start offers the copy. Errors in the window go to a log in the settings folder, which is the first thing to read when a tool stops working.</p>
+  </div>
+</section>
+
+<!-- XIV -->
+<section class="ch" id="keys">
+  <div class="col">
+  <div class="chno">Chapter XIV</div>
+  <h2>Every Key</h2>
+  <p class="inwhich">In which the keyboard is listed, for the day you cannot find the hint line.</p>
+  </div>
+
+  <div class="tbl"><table>
+    <tr><th>Key</th><th>Model level</th></tr>
+    <tr><td><kbd>T</kbd> <kbd>R</kbd> <kbd>G</kbd> <kbd>Z</kbd></td><td>Attach, Erase, Paint, Select</td></tr>
+    <tr><td><kbd>V</kbd> <kbd>F</kbd> <kbd>B</kbd> <kbd>L</kbd> <kbd>C</kbd> <kbd>M</kbd> <kbd>O</kbd> <kbd>P</kbd></td><td>Voxel, Face, Box, Line, Center, Marquee, Lasso, Pattern</td></tr>
+    <tr><td><kbd>⌥</kbd> click · <kbd>Shift</kbd> click</td><td>Erase · Paint, with any tool</td></tr>
+    <tr><td><kbd>I</kbd> · <kbd>Shift</kbd><kbd>I</kbd></td><td>Take the colour under the mouse · Inset the face under the mouse</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Steady Hand</td></tr>
+    <tr><td><kbd>Space</kbd> · <kbd>⌘</kbd><kbd>K</kbd></td><td>The star · The command palette</td></tr>
+    <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> <kbd>Q</kbd><kbd>E</kbd></td><td>Fly the view</td></tr>
+    <tr><td>Arrows · <kbd>Shift</kbd><kbd>↑</kbd><kbd>↓</kbd> · <kbd>Return</kbd></td><td>Step the key cursor · a layer up or down · click there</td></tr>
+    <tr><td><kbd>Page ↑</kbd> <kbd>Page ↓</kbd></td><td>The section plane up and down</td></tr>
+    <tr><td><kbd>Shift</kbd><kbd>C</kbd> · <kbd>Shift</kbd><kbd>L</kbd></td><td>Select by colour · Select connected</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>A</kbd> · <kbd>⌘</kbd><kbd>I</kbd> · <kbd>⌘</kbd><kbd>+</kbd> <kbd>⌘</kbd><kbd>-</kbd></td><td>Select all · Invert · Grow, shrink the selection</td></tr>
+    <tr><td><kbd>Shift</kbd><kbd>G</kbd> · <kbd>Shift</kbd><kbd>D</kbd></td><td>Grow · Shrink the model by a layer</td></tr>
+    <tr><td><kbd>Shift</kbd><kbd>F</kbd> · <kbd>Shift</kbd><kbd>P</kbd></td><td>Fill connected colour · Paint the selection</td></tr>
+    <tr><td><kbd>Shift</kbd><kbd>M</kbd> · <kbd>⌥</kbd><kbd>M</kbd></td><td>Mask the selection · Clear the mask</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>C</kbd> <kbd>⌘</kbd><kbd>X</kbd> <kbd>⌘</kbd><kbd>V</kbd> · <kbd>⌘</kbd><kbd>Shift</kbd><kbd>V</kbd></td><td>Copy, cut, paste · Paste mirrored</td></tr>
+    <tr><td><kbd>1</kbd>…<kbd>9</kbd> · <kbd>⌃</kbd><kbd>1</kbd>…<kbd>9</kbd></td><td>Recall a saved selection · Save one</td></tr>
+    <tr><td><kbd>Tab</kbd> · <kbd>Enter</kbd> · <kbd>Esc</kbd></td><td>Next level · Step into the model · Deselect, then step out</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>Z</kbd> · <kbd>⌘</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Undo · Redo</td></tr>
+    <tr><td><kbd>⌘</kbd><kbd>G</kbd> · <kbd>⌘</kbd><kbd>L</kbd> · <kbd>⌘</kbd><kbd>R</kbd> · <kbd>⌘</kbd><kbd>E</kbd></td><td>Voxel grid · History strip · Render Picture · Export Mesh</td></tr>
+  </table></div>
+
+  <div class="tbl"><table>
+    <tr><th>Key</th><th>Scene level</th></tr>
+    <tr><td><kbd>C</kbd> · <kbd>Tab</kbd></td><td>The Cut tool · turn its plane</td></tr>
+    <tr><td><kbd>G</kbd> · <kbd>Shift</kbd><kbd>G</kbd></td><td>Drop to the floor · Drop onto the voxel below</td></tr>
+    <tr><td><kbd>R</kbd> · <kbd>Shift</kbd><kbd>R</kbd></td><td>Turn a quarter · back</td></tr>
+    <tr><td>Arrows · <kbd>Shift</kbd> arrows</td><td>Nudge one cell · ten cells</td></tr>
+    <tr><td><kbd>⌥</kbd> drag · <kbd>⌃</kbd> drag</td><td>A linked copy · Carve through the models you cross</td></tr>
+    <tr><td><kbd>F</kbd> · <kbd>⌘</kbd><kbd>J</kbd> · <kbd>Delete</kbd></td><td>Frame · Merge · Remove</td></tr>
+  </table></div>
+
+  <div class="tbl"><table>
+    <tr><th>Key</th><th>Animate level · Brick mode</th></tr>
+    <tr><td><kbd>Shift</kbd><kbd>Space</kbd> · <kbd>,</kbd> <kbd>.</kbd> · <kbd>K</kbd></td><td>Play · Step a frame (with Shift: to the next key) · Key the pose</td></tr>
+    <tr><td><kbd>B</kbd> <kbd>U</kbd> <kbd>G</kbd> <kbd>I</kbd></td><td>Place, Pull, Paint, Pick a brick</td></tr>
+    <tr><td><kbd>1</kbd>…<kbd>9</kbd> · <kbd>R</kbd> · <kbd>Esc</kbd></td><td>Take a brick · Turn it · Empty the hand</td></tr>
+  </table></div>
+
+  <div class="col">
+  <p>View › Customize Rail Menu and Keys… gives the whole-model commands keys of your own. The keymap is getting crowded; the hint line always tells you what is live.</p>
+  </div>
+</section>
+
+<!-- XV -->
+<section class="ch" id="machines">
+  <div class="col">
+  <div class="chno">Chapter XV</div>
+  <h2>Rok and the Machines</h2>
+  <p class="inwhich">In which a language model is allowed to touch the voxels, under supervision.</p>
+  <p>Rok has a second user: a program. The MCP server (Rok for LLMs, in the README) gives a language model the same editor without a window: new scenes with a voxel budget, voxels set cell by cell, shapes, selection, the whole-model commands, shaders, animation, flat views to look at its work, and the path tracer for the finished picture. When Rok is open, the model edits the live window and you watch the voxels change.</p>
+  <p>The instructions push it toward true voxel art: small grids, few colours, deliberate cubes. Not a 3D model chopped into cubes. There is a difference, and it is the whole difference.</p>
+  </div>
+
+</section>
+
+<footer>
+  <div>Rok is a voxel editor for the Mac. Every screenshot in this book was taken by driving the real app with a script. The bird, the car, the robot and the walking figure are the test models that ship with the program.</div>
+</footer>
+</main>
+</div>
+
+<script>
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.toc a"));
+  var sections = links.map(function (a) { return document.querySelector(a.getAttribute("href")); });
+  if (!("IntersectionObserver" in window)) return;
+  var current = null;
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        var i = sections.indexOf(e.target);
+        if (i < 0) return;
+        if (current) current.classList.remove("on");
+        current = links[i]; current.classList.add("on");
+      }
+    });
+  }, { rootMargin: "-20% 0px -70% 0px" });
+  sections.forEach(function (s) { if (s) io.observe(s); });
+})();
+</script>
+</body>
+</html>

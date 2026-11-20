@@ -1,0 +1,112 @@
+// xs nature/terrain_tiles [Tile X] [Tile Y] [Height] [Water] [Scale] [Roughness] [Style] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'     var = 'm_tile_x'     range = '0 64'     value = '0'    step = '1'     precision = '0' }
+// arg : { name = 'Tile Y'     var = 'm_tile_y'     range = '0 64'     value = '0'    step = '1'     precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'     range = '10 100'   value = '85'   step = '1'     precision = '0' }
+// arg : { name = 'Water'      var = 'm_water'      range = '0 90'     value = '22'   step = '1'     precision = '0' }
+// arg : { name = 'Scale'      var = 'm_scale'      range = '16 512'   value = '96'   step = '1'     precision = '0' }
+// arg : { name = 'Roughness'  var = 'm_roughness'  range = '30 70'    value = '50'   step = '1'     precision = '0' }
+// arg : { name = 'Style'      var = 'm_style'      range = '0 1'      value = '0'    step = '1'     precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'       range = '0 9999'   value = '0'    step = '1'     precision = '0' }
+// xs_end
+// rok_about : 'Hills, lakes and snowy peaks that tile without a seam'
+// rok_colours : { start = '0'  rgb = '3A7CC4 E2D39A 6BA84A 3F7A35 8A8078 F2F4F7' }
+// rok_tip Tile X : The number of this tile along x, from 0 to 64. Tile 1 shows the land next to tile 0 on the +x side.
+// rok_tip Tile X : Tiles of one size with the same other settings meet without a seam.
+// rok_tip Tile Y : The number of this tile along y, from 0 to 64. Tile 1 shows the land next to tile 0 on the +y side.
+// rok_tip Tile Y : Tiles of one size with the same other settings meet without a seam.
+// rok_tip Height : How tall the highest ground is, in percent of the grid height. 10 gives low land, 100 reaches the top of the grid.
+// rok_tip Height : No effect on a flat tile (see Scale): on a 24 grid with Scale 96 and Seed 0 the ground stays at the lowest level.
+// rok_tip Water : The water level, in percent of the grid height. 0 gives no water. 90 floods all but the highest ground.
+// rok_tip Water : Water fills the low ground up to this level, and sand lies along the shore.
+// rok_tip Scale : The width of the main landforms, in cells. Low values give many small hills. High values give wide, smooth land.
+// rok_tip Scale : Scale is not limited by the grid. When Scale is much wider than the grid, the tile shows a small part of the noise and is often flat or nearly flat
+// rok_tip Scale : (Seed 0: flat on a 24 grid at Scale 96 and above, flat on a 64 grid at Scale 300). Then Height, Roughness and Style change little or nothing. Another Seed may help.
+// rok_tip Roughness : How strong the small bumps are against the big shapes, from 30 to 70. Low values give smooth land, high values give rough land.
+// rok_tip Roughness : No effect on a flat tile (see Scale).
+// rok_tip Style : 0 gives rolling hills. 1 gives flat plateaus in four steps with steep sides. No effect on a flat tile (see Scale).
+// rok_tip Seed : Picks another random layout of the same kind, from 0 to 9999.
+// Rok puts these colours in the palette from the selected colour on: water,
+// sand, grass, forest, rock, snow.
+
+// Seamless terrain tiles. Every tile computes its heights in world columns:
+// the column of cell (x, y) in tile (Tile X, Tile Y) is
+// (x, y) + (Tile X, Tile Y) * the model's size. Tiles of one size with the
+// same Height, Water, Scale, Roughness and Seed, placed edge to edge in the
+// order of their tile numbers, meet without a seam. Style 0 is rolling
+// hills, 1 flat plateaus with steep sides. Rok's New > Terrain
+// makes such a set of tiles in one step.
+
+float tt_hash(vec2 p) {
+  // Hash without sine (Dave Hoskins, MIT): the same on every GPU for whole numbers.
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float tt_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = tt_hash(i);
+  float b = tt_hash(i + vec2(1.0, 0.0));
+  float c = tt_hash(i + vec2(0.0, 1.0));
+  float d = tt_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The ground height of a world column, in cells (0 to the model's height).
+float tt_ground(vec2 column) {
+  vec2 p = (column + 0.5) / m_scale + vec2(m_seed * 17.31, m_seed * 7.73);
+  float gain = m_roughness / 100.0;
+  float sum = 0.0;
+  float amp = 0.5;
+  float norm = 0.0;
+  for (int k = 0; k < 5; k++) {
+    sum += amp * tt_noise(p);
+    norm += amp;
+    amp *= gain;
+    p = p * 2.03 + vec2(31.7, 11.3);
+  }
+  float h = clamp(sum / norm, 0.0, 1.0);
+  // Stretch the middle range, then flatten the lowlands and sharpen the peaks.
+  h = clamp((h - 0.28) / 0.44, 0.0, 1.0);
+  if (m_style > 0.5) {
+    // Plateaus: four flat steps with steep sides, like mesas.
+    float t = h * 4.0;
+    h = (floor(t) + smoothstep(0.75, 1.0, fract(t))) / 4.0;
+  } else {
+    h = pow(h, 1.6);
+  }
+  return 1.0 + h * (i_volume_size.z * m_height / 100.0 - 1.0);
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  float ground = floor(tt_ground(column));
+  float water = floor(i_volume_size.z * m_water / 100.0);
+  float top = i_volume_size.z;
+  if (z >= ground) {
+    if (z < water) return i_color_index;  // water fills the low ground up to its level
+    return 0.0;
+  }
+  // Colours from the selected one on: water, sand, grass, forest, rock, snow.
+  float slope = max(
+    max(abs(floor(tt_ground(column + vec2(1.0, 0.0))) - ground),
+        abs(floor(tt_ground(column - vec2(1.0, 0.0))) - ground)),
+    max(abs(floor(tt_ground(column + vec2(0.0, 1.0))) - ground),
+        abs(floor(tt_ground(column - vec2(0.0, 1.0))) - ground)));
+  float band = (ground - water) / max(top * m_height / 100.0 - water, 1.0);
+  float surface;
+  if (ground <= water + 1.0) surface = 1.0;       // sand at the shore
+  else if (band > 0.82) surface = 5.0;            // snow on the peaks
+  else if (slope >= 3.0 || band > 0.64) surface = 4.0;  // rock on cliffs and heights
+  else if (band > 0.36) surface = 3.0;            // forest
+  else surface = 2.0;                             // grass
+  if (z < ground - 4.0) surface = 4.0;  // rock below the top layers
+  return i_color_index + surface;
+}

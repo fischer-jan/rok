@@ -1,0 +1,56 @@
+[package]
+name = "rok_native"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+name = "rok_native"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+# `gui` (default) adds the native menu bar and the file dialogs, which pull in
+# GTK on Linux. `--no-default-features --features headless` builds the engine
+# for a machine with no display: the GPU renders off-screen and the dialogs
+# answer "cancelled".
+default = ["gui"]
+gui = ["dep:muda", "dep:rfd"]
+headless = []
+
+[dependencies]
+bytemuck = "1.25.2"
+glam = "0.33.11"
+glyphon = "0.12"
+muda = { version = "0.21", optional = true }
+numpy = "0.29.0"
+png = "0.18"
+pollster = "1.0.1"
+pyo3 = "0.29.3"
+rayon = "1.12.0"
+rfd = { version = "0.17", optional = true }
+wgpu = { version = "30.0.1", features = ["glsl"] }
+winit = "0.30.13"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.4"
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"
+
+# Keep the symbols: with the default strip, macOS refuses to load the module
+# ("mis-aligned LINKEDIT string pool").
+[profile.release]
+strip = "none"
+
+# The lint step (scripts/check.sh) runs clippy with warnings as errors. These
+# lints are off because the code they flag is written that way on purpose:
+# long argument lists and callback types in the renderer, index loops and
+# spelled-out index sums in the voxel maths, comparisons that must also be
+# true for NaN, and bounds written as the formula has them.
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+needless_range_loop = "allow"
+identity_op = "allow"
+neg_cmp_op_on_partial_ord = "allow"
+int_plus_one = "allow"

@@ -1,0 +1,6 @@
+// Leaves some cells unwritten, as a draw the GPU dropped does: Rok must
+// notice and keep the model instead of reading those cells as empty.
+float map(vec3 v) {
+  if (v.x < 2.0) discard;
+  return 1.0;
+}

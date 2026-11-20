@@ -1,0 +1,42 @@
+// xs_begin
+// author : 'Rok test'
+// arg : { name = 'Radius'  var = 'm_radius'  range = '1 64'  value = '5'  step = '1'  precision = '0' }
+// xs_end
+
+// The preprocessor features third-party shaders use: constants, function
+// macros (nested, with ## and __VA_ARGS__), continued lines, #ifdef and
+// #if with defined(), #undef, and lines Rok sets up itself.
+#version 330
+#extension GL_ARB_gpu_shader5 : enable
+#pragma optimize(on)
+
+#define PI 3.14159265
+#define TAU (2.0 * PI)
+#define SQ(x) ((x) * (x))
+#define LEN2(a, b) (SQ(a) + SQ(b))
+#define PICK(...) max(__VA_ARGS__)
+#define GLUE(a, b) a ## b
+#define CLAMP01(x) \
+  clamp(x, 0.0, 1.0)
+#define USE_BALL
+#define DETAIL 2
+
+#ifdef USE_BALL
+float shape(vec3 p) { return sqrt(LEN2(p.x, p.y) + SQ(p.z)) - m_radius; }
+#else
+float shape(vec3 p) { return -1.0; }
+#endif
+
+#if defined(USE_BALL) && DETAIL > 1
+float GLUE(detail, 2)(float d) { return CLAMP01(d / TAU); }
+#elif DETAIL == 1
+float detail2(float d) { return 0.0; }
+#endif
+
+#undef PI
+#ifndef PI
+float map(vec3 v) {
+  float d = shape(v - i_volume_size * 0.5);
+  return d <= 0.0 ? PICK(i_color_index, detail2(d)) : 0.0;
+}
+#endif

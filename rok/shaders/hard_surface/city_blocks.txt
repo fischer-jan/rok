@@ -1,0 +1,323 @@
+// xs hard_surface/city_blocks [Tile X] [Tile Y] [Block] [Height] [Streets] [Lights] [Parks] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'   var = 'm_tile_x'   range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'   var = 'm_tile_y'   range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Block'    var = 'm_block'    range = '12 64'   value = '24'   step = '1'  precision = '0' }
+// arg : { name = 'Height'   var = 'm_height'   range = '10 100'  value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Streets'  var = 'm_streets'  range = '1 8'     value = '4'    step = '1'  precision = '0' }
+// arg : { name = 'Lights'   var = 'm_lights'   range = '0 100'   value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Parks'    var = 'm_parks'    range = '0 100'   value = '12'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = '34373D A8A39A E9E5D6 C9C1B1 9C5741 3F5E7E 86AECF 262D3A FFD27A 63666C 8E949B 5E9A42 3A6E2C 7A5236 E0402F' }
+// rok_about : 'Streets, towers, rooftops and parks; tileable'
+// rok_tip Tile X : Which tile of an endless city this grid shows along x, from 0 to 64. Tiles with next numbers meet without a seam. Parks, towers and downtown areas
+// rok_tip Tile X : follow the tile, so another number gives another part of the same city.
+// rok_tip Tile Y : Which tile of an endless city this grid shows along y, from 0 to 64. Tiles with next numbers meet without a seam. Parks, towers and downtown areas
+// rok_tip Tile Y : follow the tile, so another number gives another part of the same city.
+// rok_tip Block : The width of one city block with its streets, in cells (12 to 64). A block of 20 or more has a sidewalk 2 cells wide, a smaller one 1 cell. Street
+// rok_tip Block : lamps need a block of 16 or more. A small block gives small lots and low buildings.
+// rok_tip Height : The height of the tallest building as a percent of the grid height minus 8 cells (10 to 100). The 8 free cells hold the roof parts and antennas. Every
+// rok_tip Height : building is at least 4 cells high. Most buildings are lower than the tallest.
+// rok_tip Streets : The width of the streets, in cells (1 to 8). A street of 3 or more has zebra crossings at the corners. A street of 4 or more has also a dashed centre
+// rok_tip Streets : line. Wide streets leave less room for the lots.
+// rok_tip Lights : How many windows are lit, in percent. 0 gives no lit window, but the street lamps stay lit. Glass towers use 60 percent of this value and shop windows
+// rok_tip Lights : 150 percent. This changes colours only, not the shape.
+// rok_tip Parks : How many lots are parks, in percent. 0 gives no park. 100 turns every lot into a park, with no building. A path needs a lot at least 8 cells wide. The
+// rok_tip Parks : trees stand 5 cells apart.
+// rok_tip Seed : Picks another random layout of the same kind: other lots, building heights and materials, and other downtown areas.
+
+// A city on an empty model. The ground is cut into square blocks of Block
+// cells, with a road of Streets cells on two sides of each block. A road has
+// a dashed centre line (when it is 4 or more wide) and zebra crossings at
+// the corners. A sidewalk with street lamps runs round each block.
+// The inside of a block is split into lots. A lot is a building or, as
+// often as Parks says, a park with paths and trees. Lots can have an alley
+// between them.
+// A building is concrete, brick or glass. It has windows on every floor.
+// Some windows are lit (Lights). Concrete and brick have shop windows at
+// street level, and their windows sit one cell deep in the wall. Tall
+// buildings step back once or twice as they rise. A low wall runs round
+// every roof. On the roof there are a stair house, AC units, and a water
+// tank (concrete and brick) or an antenna (glass and tall buildings).
+// Height is the tallest building as a share of the model's height. The
+// downtown areas, where the towers stand, change slowly from block to
+// block. Tile numbers work as in the terrain, so city tiles meet without a
+// seam.
+// Rok puts the colours of the rok_colours line in the palette from the
+// selected colour on.
+
+const float ASPHALT = 0.0;
+const float SIDEWALK = 1.0;
+const float MARKING = 2.0;
+const float CONCRETE = 3.0;
+const float BRICK = 4.0;
+const float GLASS = 5.0;
+const float PANE = 6.0;
+const float WINDOW = 7.0;
+const float LIT = 8.0;
+const float ROOF = 9.0;
+const float METAL = 10.0;
+const float GRASS = 11.0;
+const float LEAVES = 12.0;
+const float WOOD = 13.0;
+const float RED = 14.0;
+
+float cb_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cb_col(float k) { return i_color_index + k; }
+
+// Smooth noise over the blocks: 0 in the suburbs, 1 downtown.
+float cb_downtown(vec2 cell) {
+  vec2 p = cell * 0.35;
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float s = m_seed * 0.1 + 51.0;
+  float a = cb_hash3(vec3(i, s));
+  float b = cb_hash3(vec3(i + vec2(1.0, 0.0), s));
+  float c = cb_hash3(vec3(i + vec2(0.0, 1.0), s));
+  float d = cb_hash3(vec3(i + vec2(1.0, 1.0), s));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+bool cb_in(vec2 p, vec2 lo, vec2 hi) {
+  return p.x >= lo.x && p.y >= lo.y && p.x < hi.x && p.y < hi.y;
+}
+
+// The road: asphalt, a dashed centre line, zebra crossings at the corners.
+float cb_road(vec2 l, float z) {
+  if (z > 0.5) return 0.0;
+  float S = m_streets;
+  bool vx = l.x < S;
+  bool vy = l.y < S;
+  if (vx && vy) return cb_col(ASPHALT);  // the crossing itself
+  float across = vx ? l.x : l.y;
+  float along = vx ? l.y : l.x;
+  bool zebra = along < S + 2.0 || along >= m_block - 2.0;
+  if (S >= 3.0 && zebra) return mod(across, 2.0) < 1.0 ? cb_col(ASPHALT) : cb_col(MARKING);
+  if (S >= 4.0 && across == floor(S * 0.5) && mod(along, 4.0) < 2.0) return cb_col(MARKING);
+  return cb_col(ASPHALT);
+}
+
+// A park on lot [lo, hi): grass, a path through the middle, trees.
+float cb_park(vec2 l, float z, vec2 lo, vec2 hi, vec3 id) {
+  vec2 size = hi - lo;
+  vec2 q = l - lo;
+  vec2 mid = floor(size * 0.5);
+  bool path_x = size.x >= 8.0 && abs(q.x - mid.x) < 1.0;
+  bool path_y = size.y >= 8.0 && abs(q.y - mid.y) < 1.0;
+  if (z < 1.5) return (path_x || path_y) ? cb_col(SIDEWALK) : cb_col(GRASS);
+  // Trees on a grid of 5 cells, not on the paths.
+  vec2 g = floor(q / 5.0);
+  vec2 t = g * 5.0 + 2.0;
+  if (t.x + 2.0 >= size.x || t.y + 2.0 >= size.y) return 0.0;
+  if ((size.x >= 8.0 && abs(t.x - mid.x) <= 1.0) || (size.y >= 8.0 && abs(t.y - mid.y) <= 1.0)) return 0.0;
+  float h = cb_hash3(id + vec3(g, 9.1));
+  if (h > 0.8) return 0.0;
+  float top = 4.0 + floor(h * 2.5);  // the crown's centre
+  vec3 d = vec3(q - t, z - top);
+  if (d.x == 0.0 && d.y == 0.0 && z < top) return cb_col(WOOD);
+  if (dot(d, d) <= 2.6) return cb_col(LEAVES);
+  return 0.0;
+}
+
+// How far in a building's floors are at height z: tall ones step back.
+float cb_inset(float z, float H, float steps, float s) {
+  if (steps > 1.5 && z >= floor(H * 0.8)) return 2.0 * s;
+  if (steps > 0.5 && z >= floor(H * 0.6)) return s;
+  return 0.0;
+}
+
+// The top floor of the tier that holds height z.
+float cb_tier_top(float z, float H, float steps) {
+  if (steps > 1.5 && z >= floor(H * 0.8)) return H - 1.0;
+  if (steps > 0.5 && z >= floor(H * 0.6)) return (steps > 1.5 ? floor(H * 0.8) : H) - 1.0;
+  return (steps > 0.5 ? floor(H * 0.6) : H) - 1.0;
+}
+
+// What stands on the roof: p is the place inside the low wall (0 .. n-1),
+// k the layer above the roof (0 first).
+float cb_roof(vec2 p, float k, vec2 n, vec3 id, float mat, float H, float maxH) {
+  // Mirror, so the stair house and the tank sit in a random corner.
+  if (cb_hash3(id + 2.3) < 0.5) p.x = n.x - 1.0 - p.x;
+  if (cb_hash3(id + 3.4) < 0.5) p.y = n.y - 1.0 - p.y;
+  float wall = cb_col(mat == 2.0 ? GLASS : (mat == 1.0 ? BRICK : CONCRETE));
+  bool room = min(n.x, n.y) >= 5.0;
+  // The stair house: a box of 3 by 2, two high, with a dark door.
+  if (room && cb_in(p, vec2(0.0), vec2(3.0, 2.0))) {
+    if (k > 1.5) return 0.0;
+    if (k < 0.5 && p.y == 1.0 && p.x == 1.0) return cb_col(WINDOW);
+    return k > 0.5 ? cb_col(ROOF) : wall;
+  }
+  // A water tank on legs (concrete and brick), in the opposite corner.
+  bool tank = room && mat < 1.5 && cb_hash3(id + 4.5) < 0.7;
+  vec2 tp = p - (n - 3.0);
+  if (tank && cb_in(tp, vec2(0.0), vec2(3.0))) {
+    bool corner = tp.x != 1.0 && tp.y != 1.0;
+    if (k < 0.5) return corner ? cb_col(METAL) : 0.0;
+    if (k < 3.5) return corner ? 0.0 : (k == 2.0 ? cb_col(METAL) : cb_col(WOOD));
+    if (k < 4.5 && tp.x == 1.0 && tp.y == 1.0) return cb_col(WOOD);
+    return 0.0;
+  }
+  // An antenna in the middle (glass and the tall ones), a red light on top.
+  vec2 c = floor(n * 0.5);
+  bool mast = (mat == 2.0 || H > 0.7 * maxH) && cb_hash3(id + 5.6) < 0.6;
+  if (mast && abs(p.x - c.x) <= 1.0 && abs(p.y - c.y) <= 1.0) {
+    float L = 3.0 + floor(cb_hash3(id + 6.7) * 4.0);
+    if (k < 0.5) return cb_col(METAL);
+    if (p.x == c.x && p.y == c.y) return k < L ? cb_col(METAL) : (k == L ? cb_col(RED) : 0.0);
+    return 0.0;
+  }
+  // AC units: 2 by 2 boxes on a grid of 3, clear of the rest.
+  if (k > 0.5) return 0.0;
+  vec2 g = floor(p / 3.0);
+  vec2 a = p - g * 3.0;
+  if (a.x > 1.5 || a.y > 1.5 || g.x * 3.0 + 2.0 > n.x || g.y * 3.0 + 2.0 > n.y) return 0.0;
+  vec2 lo = g * 3.0;
+  if (room && lo.x < 4.0 && lo.y < 3.0) return 0.0;
+  if (tank && lo.x + 2.0 > n.x - 4.0 && lo.y + 2.0 > n.y - 4.0) return 0.0;
+  if (mast && abs(lo.x + 0.5 - c.x) < 3.0 && abs(lo.y + 0.5 - c.y) < 3.0) return 0.0;
+  if (cb_hash3(id + vec3(g, 7.8)) < 0.5) return (a.x == 0.0 && a.y == 0.0) ? cb_col(ROOF) : cb_col(METAL);
+  return 0.0;
+}
+
+// A building on lot [lo, hi).
+float cb_building(vec2 l, float z, vec2 lo, vec2 hi, vec3 id, vec2 cell) {
+  float Z = i_volume_size.z;
+  float maxH = max(4.0, floor((Z - 8.0) * m_height / 100.0));
+  float town = cb_downtown(cell);
+  float r = cb_hash3(id + 0.5);
+  float H = max(4.0, floor(maxH * (0.08 + 0.92 * pow(r, mix(3.0, 0.7, town)))));
+  vec2 size = hi - lo;
+  // Material: 0 concrete, 1 brick, 2 glass. Tall buildings are mostly glass.
+  float m = cb_hash3(id + 1.5);
+  float mat = m < (H > 0.6 * maxH ? 0.65 : 0.12) ? 2.0 : (cb_hash3(id + 2.5) < 0.5 ? 1.0 : 0.0);
+  // Some buildings stand back from the street behind a small square.
+  if (min(size.x, size.y) >= 8.0 && cb_hash3(id + 3.5) < 0.3) {
+    if (!cb_in(l, lo + 1.0, hi - 1.0)) return z < 1.5 ? cb_col(SIDEWALK) : 0.0;
+    lo += 1.0;
+    hi -= 1.0;
+    size -= 2.0;
+  }
+  float s = min(size.x, size.y) >= 12.0 ? 2.0 : 1.0;
+  float steps = 0.0;
+  if (H >= 12.0 && min(size.x, size.y) >= 6.0 + 2.0 * s) steps = 1.0;
+  if (H >= 18.0 && min(size.x, size.y) >= 6.0 + 4.0 * s && cb_hash3(id + 4.5) < 0.6) steps = 2.0;
+  float wall = cb_col(mat == 2.0 ? GLASS : (mat == 1.0 ? BRICK : CONCRETE));
+
+  float ins = cb_inset(z, H, steps, s);
+  vec2 fa = lo + ins;
+  vec2 fb = hi - ins;
+  if (z < H && cb_in(l, fa, fb)) {
+    float top = cb_tier_top(z, H, steps);
+    float dx = min(l.x - fa.x, fb.x - 1.0 - l.x);
+    float dy = min(l.y - fa.y, fb.y - 1.0 - l.y);
+    float d = min(dx, dy);
+    if (z == top) return d < 0.5 ? wall : cb_col(ROOF);
+    if (d > 1.5) return wall;  // inside
+    // Which wall the cell is on, and where along it.
+    bool on_x = dx <= dy;
+    float other = on_x ? dy : dx;
+    float t = on_x ? l.y - fa.y : l.x - fa.x;
+    float face = on_x ? (l.x - fa.x < fb.x - 1.0 - l.x ? 0.0 : 1.0) : (l.y - fa.y < fb.y - 1.0 - l.y ? 2.0 : 3.0);
+    if (other < 1.0 || z < 2.0 || z > top - 1.0) return wall;
+    bool shop = z < 4.0 && mat < 1.5;
+    float f = z < 5.0 ? 0.0 : floor((z - 5.0) / 3.0) + 1.0;  // the floor
+    float fz = z < 5.0 ? z - 2.0 : mod(z - 5.0, 3.0);
+    float col = 0.0;  // the window's column, -1 for the wall between
+    if (mat == 2.0) {
+      // Glass: rows of panes between floor bands, a frame every third cell.
+      if (d > 0.5) return wall;
+      if (fz > 1.5 || mod(t, 3.0) == 0.0) return wall;
+      bool lit2 = cb_hash3(id + vec3(floor(t / 3.0), f, face + 11.0)) * 100.0 < m_lights * 0.6;
+      return lit2 ? cb_col(LIT) : cb_col(PANE);
+    }
+    if (shop) {
+      // Shop windows at street level, a sign band above.
+      if (fz > 1.5 || mod(t, 4.0) == 0.0) return wall;
+      col = floor(t / 4.0);
+    } else {
+      if (fz > 1.5) return wall;
+      if (mat == 1.0) {
+        if (mod(t, 2.0) == 0.0) return wall;
+        col = t;
+      } else {
+        if (mod(t, 3.0) == 0.0) return wall;
+        col = floor(t / 3.0);
+      }
+    }
+    // A window: a hole in the outer cell, the glass one cell in.
+    if (d < 0.5) return 0.0;
+    bool lit = cb_hash3(id + vec3(col, f, face + 21.0)) * 100.0 < (shop ? m_lights * 1.5 : m_lights);
+    return lit ? cb_col(LIT) : cb_col(WINDOW);
+  }
+  // Above a roof: the low wall round its edge, and what stands on top.
+  if (z < 0.5) return 0.0;
+  float below = z - 1.0;
+  if (below >= H) {
+    // Over the top roof.
+    float ib = cb_inset(H - 1.0, H, steps, s);
+    vec2 ta = lo + ib;
+    vec2 tb = hi - ib;
+    if (!cb_in(l, ta, tb)) return 0.0;
+    if (!cb_in(l, ta + 1.0, tb - 1.0)) return z == H ? wall : 0.0;
+    return cb_roof(l - ta - 1.0, z - H, tb - ta - 2.0, id, mat, H, maxH);
+  }
+  // Over a lower roof, where the building steps back.
+  if (cb_tier_top(below, H, steps) != below) return 0.0;
+  float ib = cb_inset(below, H, steps, s);
+  if (!cb_in(l, lo + ib, hi - ib)) return 0.0;
+  return cb_in(l, lo + ib + 1.0, hi - ib - 1.0) ? 0.0 : wall;
+}
+
+float map(vec3 v) {
+  vec3 c = floor(v);
+  float z = c.z;
+  vec2 w = c.xy + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  vec2 cell = floor(w / m_block);
+  vec2 l = w - cell * m_block;
+  float S = m_streets;
+  if (l.x < S || l.y < S) return cb_road(l, z);
+  // The sidewalk: one cell high, two wide round a large block.
+  float W = m_block >= 20.0 ? 2.0 : 1.0;
+  vec2 lo = vec2(S + W);
+  vec2 hi = vec2(m_block - W);
+  if (!cb_in(l, lo, hi)) {
+    if (z < 1.5) return cb_col(SIDEWALK);
+    // Street lamps along the kerb, every 9 cells.
+    bool kerb_x = l.x == S || l.x == m_block - 1.0;
+    bool kerb_y = l.y == S || l.y == m_block - 1.0;
+    if (kerb_x == kerb_y) return 0.0;  // a corner, or not at the kerb
+    float along = kerb_x ? l.y : l.x;
+    if (m_block < 16.0 || mod(along - S - 3.0, 9.0) != 0.0 || along > m_block - 4.0) return 0.0;
+    if (z < 3.5) return cb_col(METAL);
+    return z < 4.5 ? cb_col(LIT) : 0.0;
+  }
+  // Split the block into lots, three times at most; some cuts leave an alley.
+  for (int level = 0; level < 3; level++) {
+    vec2 size = hi - lo;
+    vec3 id = vec3(cell * 7.0 + lo + hi * 0.3, float(level) + m_seed * 0.1);
+    if (max(size.x, size.y) < 10.0 || (level > 0 && cb_hash3(id) < 0.25)) break;
+    float t = 0.3 + 0.4 * cb_hash3(id + 1.7);
+    bool alley = cb_hash3(id + 4.1) < 0.35;
+    if (size.x >= size.y) {
+      float s = floor(lo.x + size.x * t);
+      if (alley && l.x == s) return z < 1.5 ? cb_col(SIDEWALK) : 0.0;
+      if (l.x < s) hi.x = s; else lo.x = alley ? s + 1.0 : s;
+    } else {
+      float s = floor(lo.y + size.y * t);
+      if (alley && l.y == s) return z < 1.5 ? cb_col(SIDEWALK) : 0.0;
+      if (l.y < s) hi.y = s; else lo.y = alley ? s + 1.0 : s;
+    }
+  }
+  vec3 id = vec3(cell * 7.0 + lo, m_seed * 0.1 + 3.0);
+  if (cb_hash3(id + 8.5) * 100.0 < m_parks) return cb_park(l, z, lo, hi, id);
+  return cb_building(l, z, lo, hi, id, cell);
+}

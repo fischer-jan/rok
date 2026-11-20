@@ -1,0 +1,16 @@
+// xs_begin
+// author : 'Rok test'
+// xs_end
+
+// Cuts every voxel of a selected colour, like the knives: it acts on the
+// selection, so Rok starts it with one colour.
+bool isSelected(float index) {
+  for (int k = 0; k < i_num_color_sels; k++) {
+    if (index == color_sel(float(k))) return true;
+  }
+  return false;
+}
+float map(vec3 v) {
+  float index = voxel(v);
+  return isSelected(index) ? 0.0 : index;
+}

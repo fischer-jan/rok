@@ -1,0 +1,159 @@
+// xs nature/meadow [Grass] [Height] [Flowers] [Patches] [Grass Only] [Seed] [Clumps]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Grass'      var = 'm_grass_amt' range = '0 100'   value = '70'   step = '1'  precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'    range = '1 8'     value = '3'    step = '1'  precision = '0' }
+// arg : { name = 'Flowers'    var = 'm_flowers'   range = '0 100'   value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Patches'    var = 'm_patches'   range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Grass Only' var = 'm_grass'     range = '0 1'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'      range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Clumps'     var = 'm_clump'     range = '0 100'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = '2F6B2A 4E9A36 86C24A C9D66A F4F1E6 F2C230 E0453A 9C5BD6 4F8FE6 E89A2A' }
+// rok_about : 'Grass tufts and wild flowers on the ground'
+// rok_tip Grass : How much of the ground gets grass, in percent. 0 gives no grass. 100 gives a blade on every
+// rok_tip Grass : column when Patches and Clumps are 0. With Patches the amount also changes from place to place.
+// rok_tip Grass : Flowers do not depend on Grass.
+// rok_tip Height : The tallest grass blade in cells, 1 to 8. Blades are between 1 and Height cells tall. It also
+// rok_tip Height : lifts the flowers: a flower head stands Height + 1 to Height + 3 cells above the ground.
+// rok_tip Flowers : How many of the 4 by 4 blocks of columns have a flower, in percent. 0 gives none, 100 gives one
+// rok_tip Flowers : in every block. Flowers of one colour grow near each other. None stand on the outer columns of
+// rok_tip Flowers : the grid. Flowers also grow with Grass at 0.
+// rok_tip Patches : How uneven the grass is, in percent. 0 gives even grass. 100 gives tall and thick grass in some
+// rok_tip Patches : places, thin or bare grass in others. The patches are about 7 cells wide. It does not change the
+// rok_tip Patches : flowers. At Clumps 100 it has no effect, because the slow noise of Clumps then decides alone.
+// rok_tip Grass Only : 0 lets grass and flowers stand on any ground except water (a clearly blue colour). 1 lets them stand
+// rok_tip Grass Only : only on green ground or dark brown earth. It keeps them off grey rock, concrete, snow, light
+// rok_tip Grass Only : sand, yellow and red ground. Needs ground in the model; on an empty grid it changes nothing.
+// rok_tip Seed : Picks another random layout of the same kind. Any whole number from 0 to 9999. The same seed
+// rok_tip Seed : always gives the same result.
+// rok_tip Clumps : How closed the grass patches are, in percent. At 0 every column is its own chance. At 100 a slow
+// rok_tip Clumps : noise alone decides, so the grass forms closed patches of one even height with bare ground
+// rok_tip Clumps : between them, and the tips dry in whole areas. At 100 the Patches argument has no effect.
+// Rok puts these colours in the palette from the selected colour on: dark,
+// middle and light grass, dry tips, then white, yellow, red, purple and blue
+// petals, and the flowers' orange middles.
+
+// Grass and wild flowers on the ground the model already has: on the top of
+// every filled column, or on the floor of an empty grid. Never on water (a
+// blue colour); Grass Only keeps them off grey rock, snow, sand and red ground too.
+//
+// Grass grows in tufts, one blade a cell, from one to Height cells tall,
+// dark at the foot and light at the tip; a few tips are dry. Grass is how
+// much of the ground it covers. Patches makes the grass grow in patches:
+// taller and thicker in some places, thin or bare in others. Clumps makes
+// the patches solid: at 0 each column is its own chance, at 100 the slow
+// patch noise alone decides, so the grass forms closed patches of one even
+// height with bare ground between them, and their tips dry in whole areas,
+// not blade by blade.
+//
+// A flower is a stem with a head on top: a middle and four petals round it,
+// one colour a flower. Flowers is how many there are. Flowers of one colour
+// grow near each other, as in a real meadow.
+// The voxels already there stay.
+
+float md_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float md_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = md_hash(i);
+  float b = md_hash(i + vec2(1.0, 0.0));
+  float c = md_hash(i + vec2(0.0, 1.0));
+  float d = md_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The height at which a plant at this column stands: the first cell above a
+// filled one, looking down from z0 for at most 12 cells; 0 on the grid's
+// floor; -1 when nothing is found, or when the ground there is not for
+// plants (water; with Grass Only, anything but green ground or dark brown earth).
+float md_ground(vec2 col, float z0) {
+  for (int k = 0; k < 12; k++) {
+    float zz = z0 - float(k);
+    if (zz < 0.0) return 0.0;
+    float g = voxel(vec3(col, zz + 0.5));
+    if (g > 0.0) {
+      vec4 c = palette(g);
+      if (c.b > c.r + 0.12 && c.b > c.g) return -1.0;
+      if (m_grass > 0.5) {
+        float hi = max(c.r, max(c.g, c.b));
+        float lo = min(c.r, min(c.g, c.b));
+        bool grey = hi - lo < 0.15 * hi;  // rock, concrete, snow
+        bool green = c.g >= c.r * 0.97 && c.g >= c.b;
+        bool soil = c.r >= c.g && c.g >= c.b && hi < 0.5;  // dark brown earth
+        if (grey || !(green || soil)) return -1.0;
+      }
+      return zz + 1.0;
+    }
+  }
+  return -1.0;
+}
+
+// The flower of a column, if it has one: its height (0 none) and colour.
+// A flower stands in some cells of a grid of 4 by 4 columns, and never on
+// the edge of the grid (its petals need room).
+vec2 md_flower(vec2 col) {
+  if (m_flowers < 0.5) return vec2(0.0);
+  vec2 cell = floor(col / 4.0);
+  vec2 at = cell * 4.0 + 1.0 + floor(vec2(md_hash(cell + vec2(m_seed, 3.1)), md_hash(cell + vec2(m_seed, 4.7))) * 2.99);
+  if (floor(col.x) != at.x || floor(col.y) != at.y) return vec2(0.0);
+  if (md_hash(cell + vec2(m_seed, 5.3)) * 100.0 > m_flowers) return vec2(0.0);
+  if (col.x < 1.0 || col.y < 1.0 || col.x > i_volume_size.x - 1.0 || col.y > i_volume_size.y - 1.0) return vec2(0.0);
+  // One colour in a patch: the slow noise picks it.
+  float hue = floor(md_noise(col / 9.0 + vec2(m_seed * 1.7, 2.0)) * 4.99);
+  float h = m_height + 1.0 + floor(md_hash(cell + vec2(m_seed, 6.1)) * 2.99);
+  return vec2(h, 4.0 + min(hue, 4.0));
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here > 0.0) return here;
+  vec3 p = floor(v) + 0.5;
+  vec2 col = p.xy;
+  // A flower's head: its middle, or a petal beside the middle.
+  for (int n = 0; n < 5; n++) {
+    vec2 d = vec2(0.0);
+    if (n == 1) d = vec2(1.0, 0.0);
+    if (n == 2) d = vec2(-1.0, 0.0);
+    if (n == 3) d = vec2(0.0, 1.0);
+    if (n == 4) d = vec2(0.0, -1.0);
+    vec2 f = md_flower(col + d);
+    if (f.x < 0.5) continue;
+    float base = md_ground(col + d, floor(p.z));
+    if (base < 0.0) continue;
+    float rel = p.z - base;
+    if (n == 0) {
+      if (rel > f.x - 1.0 && rel < f.x) return i_color_index + 9.0;  // the middle
+      if (rel > 0.0 && rel < f.x - 1.0) return i_color_index + 1.0;  // the stem
+    } else if (rel > f.x - 1.0 && rel < f.x) {
+      return i_color_index + f.y;  // a petal
+    }
+  }
+  // Grass: a blade on this column, as tall as the patch noise allows.
+  float patch = m_patches < 0.5 ? 1.0 : md_noise(col / 7.0 + vec2(m_seed * 3.1, 7.0));
+  float thick = mix(1.0, patch * 1.6, m_patches / 100.0);
+  float clump = m_clump / 100.0;
+  // The chance of a blade: the column's own at Clumps 0, the slow noise at 100.
+  float chance = mix(md_hash(col + vec2(m_seed * 0.37, 1.0)), 1.0 - md_noise(col / 7.0 + vec2(m_seed * 3.1, 7.0)), clump);
+  if (chance * 100.0 > m_grass_amt * mix(thick, 1.0, clump)) return here;
+  float jitter = mix(0.4 + 0.8 * md_hash(col + vec2(m_seed, 2.0)), 1.0, clump);
+  float tall = clamp(floor(m_height * jitter * mix(1.0, patch * 1.5, m_patches / 100.0 * (1.0 - clump)) + 0.5), 1.0, m_height);
+  float base = md_ground(col, floor(p.z));
+  if (base < 0.0) return here;
+  float rel = p.z - base;
+  if (rel < 0.0 || rel > tall) return here;
+  if (rel > tall - 1.0) {
+    // The tip: light, or dry now and then; with Clumps, dry in whole areas, so
+    // a patch seen from above is one colour.
+    float dry = mix(md_hash(col + vec2(m_seed, 9.0)), md_noise(col / 11.0 + vec2(m_seed * 2.3, 11.0)), clump);
+    return i_color_index + (dry < 0.12 ? 3.0 : 2.0);
+  }
+  return i_color_index + (rel < 1.0 && tall > 1.5 ? 0.0 : 1.0);
+}

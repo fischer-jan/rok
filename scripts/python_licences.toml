@@ -1,0 +1,69 @@
+# The licence of every Python package in uv.lock, as an SPDX expression.
+# scripts/check_python_licences.py fails when a package of uv.lock is missing
+# here, or when its expression cannot be met with the licences in `allow`.
+# For a new package, read its licence on PyPI
+# (scripts/check_python_licences.py --lookup) and add the line.
+# `--verify` compares every line with PyPI; scripts/check.sh does that on each
+# push that changes uv.lock or this file.
+
+# Only permissive licences, as native/deny.toml has them for the Rust crates.
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "PSF-2.0",
+    "Unicode-3.0",
+]
+
+# "name==version" for a package whose licence PyPI does not state in a form the
+# script can read. A person read the licence of that version; a new version
+# asks again.
+checked_by_hand = []
+
+[packages]
+annotated-types = "MIT"
+anyio = "MIT"
+attrs = "MIT"
+cffi = "MIT-0"
+click = "BSD-3-Clause"
+colorama = "BSD-3-Clause"
+cryptography = "Apache-2.0 OR BSD-3-Clause"
+execnet = "MIT"
+h11 = "MIT"
+httpcore2 = "BSD-3-Clause"
+httpx2 = "BSD-3-Clause"
+httpx2-jsfetch = "BSD-3-Clause"
+idna = "BSD-3-Clause"
+iniconfig = "MIT"
+jsonschema = "MIT"
+jsonschema-specifications = "MIT"
+mcp = "MIT"
+mcp-types = "MIT"
+numpy = "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+opentelemetry-api = "Apache-2.0"
+packaging = "Apache-2.0 OR BSD-2-Clause"
+pluggy = "MIT"
+pycparser = "BSD-3-Clause"
+pydantic = "MIT"
+pydantic-core = "MIT"
+pygments = "BSD-2-Clause"
+pyjwt = "MIT"
+pytest = "MIT"
+pytest-timeout = "MIT"
+pytest-xdist = "MIT"
+python-multipart = "Apache-2.0"
+pywin32 = "PSF-2.0"
+referencing = "MIT"
+rpds-py = "MIT"
+sse-starlette = "BSD-3-Clause"
+starlette = "BSD-3-Clause"
+truststore = "MIT"
+typing-extensions = "PSF-2.0"
+typing-inspection = "MIT"
+uvicorn = "BSD-3-Clause"

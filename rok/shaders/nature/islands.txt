@@ -1,0 +1,139 @@
+// xs nature/islands [Tile X] [Tile Y] [Height] [Scale] [Coverage] [Style] [Beach] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'    var = 'm_tile_x'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'    var = 'm_tile_y'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'    var = 'm_height'   range = '10 100'   value = '55'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'     var = 'm_scale'    range = '16 512'   value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Coverage'  var = 'm_cover'    range = '0 100'    value = '45'   step = '1'  precision = '0' }
+// arg : { name = 'Style'     var = 'm_style'    range = '0 1'      value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Beach'     var = 'm_beach'    range = '0 100'    value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'      var = 'm_seed'     range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Islands in a sea with beaches, lagoons and green hills'
+// rok_colours : { start = '0'  rgb = '1F4F8C 3E9BC8 5CC6D6 E8D9A0 6BAA3C 3F7A35 8A8078' }
+// Rok puts these colours in the palette from the selected colour on: deep
+// water, water, shallows over the reef, sand, grass, forest, rock.
+// rok_tip Tile X : Which tile of a larger world this grid shows, counted in whole grids along x. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Tile Y : Which tile of a larger world this grid shows, counted in whole grids along y. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Height : How high the highest land stands, as a percent of a limit. The limit is the smaller of the grid height and 0.35 times the smaller of the grid width and depth. The sea level is 42 percent of that top, so Height also sets how deep the sea is.
+// rok_tip Scale : The size of the islands in cells. Small values give many small islands. Large values give a few big ones. The value is capped at 1.3 times the smaller of the grid width and depth. So on a 64 grid, values above 83 change nothing. On a 24 grid, values above 31 change nothing.
+// rok_tip Coverage : How much of the world is land, in percent. 0 gives the least land and 100 gives the most. Even 0 leaves some land: on a 64 grid about one column in five.
+// rok_tip Style : 0 is an archipelago that goes on across the tile edges. 1 is one island in the middle of each tile, with the sea at the tile edge.
+// rok_tip Beach : How wide the sand band along the shore is. The band reaches from about 0.5 cell above the sea at 0 to about 2.5 cells at 100. It follows the height of the land, so on a steep coast the change is small. On a low land of a small grid, 100 can turn all the land to sand.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the islands and the woods.
+
+// Seamless island tiles. The land is a noise that stands above the sea level
+// where the noise is high; below it the sea floor slopes away, shallow near
+// the coast (the reef, light turquoise) and deeper out to sea. A band of sand
+// lies along the shore (Beach makes it wider), then grass, forest on the
+// higher ground and bare rock on the steep hills. Style 0 is an archipelago
+// that runs on across the tile edges, as one noise over the whole world. Style
+// 1 is one island in the middle of each tile, with sea at the tile's edge.
+// Coverage is how much of the world is land. The water is solid down to the
+// floor, so a cut through the block shows it.
+
+float is_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float is_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = is_hash(i);
+  float b = is_hash(i + vec2(1.0, 0.0));
+  float c = is_hash(i + vec2(0.0, 1.0));
+  float d = is_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The tallest the ground gets, in cells: Height is a share of the grid's height, but
+// never more than 35 % of the ground's width, so a tall grid does not give a tower.
+float is_top() { return min(i_volume_size.z, 0.35 * min(i_volume_size.x, i_volume_size.y)) * m_height / 100.0; }
+
+// The land noise of a world column, 0 to 1.
+float is_land(vec2 column) {
+  // Scale in cells, but never much wider than the grid, so a small grid still
+  // gets a coast. All tiles of a set have one size: this keeps them seamless.
+  float scale = min(m_scale, 1.3 * min(i_volume_size.x, i_volume_size.y));
+  vec2 p = (column + 0.5) / scale + vec2(m_seed * 17.31 + 5.0, m_seed * 7.73 + 3.0);
+  // A little domain warp gives the coasts their bays and headlands.
+  p += (vec2(is_noise(p * 1.3 + vec2(3.1, 7.7)), is_noise(p * 1.3 + vec2(11.3, 1.9))) - 0.5) * 0.8;
+  float sum = 0.0;
+  float amp = 0.5;
+  float norm = 0.0;
+  for (int k = 0; k < 5; k++) {
+    sum += amp * is_noise(p);
+    norm += amp;
+    amp *= 0.5;
+    p = p * 2.03 + vec2(31.7, 11.3);
+  }
+  float e = sum / norm;
+  if (m_style > 0.5) {
+    // One island per tile: the sea rises toward the tile's edge.
+    vec2 local = (mod(column, i_volume_size.xy) + 0.5) / i_volume_size.xy * 2.0 - 1.0;
+    float d = min(1.0, (local.x * local.x + local.y * local.y) / 1.4);
+    e = e * 0.75 + (1.0 - d) * 0.5;
+  }
+  return e;
+}
+
+// The sea level in cells.
+float is_sea() { return floor(is_top() * 0.42); }
+
+// The ground height of a world column, in cells: the sea floor below the sea level.
+float is_ground(vec2 column) {
+  float top = is_top();
+  float sea = is_sea();
+  float e = is_land(column);
+  float shore = mix(0.62, 0.4, m_cover / 100.0);  // land above this noise value
+  if (e >= shore) {
+    // A soft curve, not a clamp: the land rises fast at the coast and levels
+    // off near the top, so a summit is a rounded peak and not a flat cut.
+    float x = (e - shore) / (0.78 - shore);
+    float h = min((1.0 - exp(-1.4 * x)) / (1.0 - exp(-1.4 * 2.4)), 1.0);
+    return sea + 1.0 + h * (top - sea - 1.0);
+  }
+  // The floor: shallow near the coast, deeper the further from land.
+  float away = clamp((shore - e) / shore, 0.0, 1.0);
+  float reef = smoothstep(0.0, 0.16, away);
+  return max(1.0, sea - 1.0 - reef * (sea - 2.0) * (0.35 + 0.65 * smoothstep(0.1, 0.7, away)));
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  float ground = floor(is_ground(column));
+  float sea = is_sea();
+  if (z >= ground) {
+    if (z >= sea) return 0.0;
+    // Water: light over the shallows, darker with depth.
+    float depth = sea - z;
+    if (ground >= sea - 3.0) return depth < 2.0 ? i_color_index + 2.0 : i_color_index + 1.0;
+    return depth > sea * 0.55 ? i_color_index : i_color_index + 1.0;
+  }
+  float slope = max(
+    max(abs(floor(is_ground(column + vec2(1.0, 0.0))) - ground),
+        abs(floor(is_ground(column - vec2(1.0, 0.0))) - ground)),
+    max(abs(floor(is_ground(column + vec2(0.0, 1.0))) - ground),
+        abs(floor(is_ground(column - vec2(0.0, 1.0))) - ground)));
+  if (z < ground - 4.0) return i_color_index + 6.0;  // rock under everything
+  if (ground < sea) return ground >= sea - 4.0 ? i_color_index + 3.0 : i_color_index + 6.0;  // the reef is sand
+  float above = ground - sea;
+  float top = max(is_top() - sea, 1.0);
+  float sand = 0.5 + m_beach / 100.0 * 2.0;
+  float speck = is_noise(column / 2.0 + vec2(m_seed));
+  if (above <= sand + (speck - 0.5)) return i_color_index + 3.0;  // beach
+  if (slope >= 3.0) return i_color_index + 6.0;
+  // Woods and meadows in patches: more forest the higher the ground, bare
+  // rock in patches on the summits.
+  float wood = is_noise(column / 6.0 + vec2(m_seed * 3.0)) + (is_noise(column / 1.7 + vec2(5.0, m_seed)) - 0.5) * 0.2;
+  float alt = above / top;
+  if (alt > 0.82 && wood < 0.75) return i_color_index + 6.0;  // bare rock on the summits
+  return wood > 0.62 - alt * 0.45 ? i_color_index + 5.0 : i_color_index + 4.0;
+}

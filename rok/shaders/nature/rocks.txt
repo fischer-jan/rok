@@ -1,0 +1,164 @@
+// xs nature/rocks [Tile X] [Tile Y] [Size] [Density] [Roughness] [Seed] [Moss]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'     var = 'm_tile_x'     range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'     var = 'm_tile_y'     range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Size'       var = 'm_size'       range = '2 40'    value = '5'    step = '1'  precision = '0' }
+// arg : { name = 'Density'    var = 'm_density'    range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Roughness'  var = 'm_roughness'  range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'       range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Moss'       var = 'm_moss'       range = '0 100'   value = '20'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Faceted stones and boulders, half sunk into the ground'
+// rok_colours : { start = '0'  rgb = 'B3ADA4 85807A 5A5551 3F3B38 6B8A3A' }
+// rok_tip Tile X : The number of this tile along x, from 0 to 64. It moves the stone layout by one grid width per step.
+// rok_tip Tile X : Tiles with the same other settings meet without a seam. No stone crosses the edge of a tile.
+// rok_tip Tile Y : The number of this tile along y, from 0 to 64. It moves the stone layout by one grid width per step.
+// rok_tip Tile Y : Tiles with the same other settings meet without a seam. No stone crosses the edge of a tile.
+// rok_tip Size : The radius of a stone, in cells. Each stone is between 0.75 and 1.45 times this. Size also sets the spacing:
+// rok_tip Size : a stone place is 2.5 times Size wide, so a bigger Size gives fewer and bigger stones. A stone cannot be wider than the grid allows,
+// rok_tip Size : so above about half the grid width nothing changes (above 10 on a 24 grid, above 30 on a 64 grid).
+// rok_tip Density : How many of the stone places hold a stone, in percent. 0 gives no stones, 100 fills every place.
+// rok_tip Density : Low values such as 1 to 5 can give the same few stones.
+// rok_tip Roughness : How irregular the stones are, from 0 to 100. At 0 the faces are even and regular.
+// rok_tip Roughness : At 100 the faces tilt and move most, and the stones get a little bigger.
+// rok_tip Seed : Picks another random layout of the same kind, from 0 to 9999.
+// rok_tip Moss : How much moss grows on the faces that look up, from 0 to 100. At 0 there is none.
+// rok_tip Moss : At 100 it covers most of the top faces (743 moss cells on a 64 grid, against 96 at the default 20).
+// Rok puts these colours in the palette from the selected colour on: light,
+// middle, dark and deepest stone, then moss.
+
+// Scattered stones and boulders, half sunk into the ground. Each
+// stone is cut from flat faces, like a low-poly rock: a top face, six faces
+// round its sides and three bevels between them. A face that looks up is
+// light, one that looks sideways middle, one that looks down dark, and each
+// face is a shade lighter or darker at random, so the facets show. Roughness
+// tilts and moves the faces more, so the stone gets more irregular. Moss
+// grows in patches on the faces that look up. A stone stands on the top of
+// the model under its middle, or on the floor of an empty grid. The voxels
+// already there stay.
+//
+// Each stone sits in a cell of a world grid two and a half times Size wide,
+// so tiles with the same settings and their tile numbers meet without a
+// seam, as the terrain tiles do. No stone crosses the edge of a tile: one
+// near the edge moves inwards.
+
+float rk_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float rk_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float rk_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(rk_hash3(i), rk_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(rk_hash3(i + vec3(0.0, 1.0, 0.0)), rk_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(rk_hash3(i + vec3(0.0, 0.0, 1.0)), rk_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(rk_hash3(i + vec3(0.0, 1.0, 1.0)), rk_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// Face k of a stone: its outward direction. 0 is the top, 1..6 the sides
+// (tilted up a little), 7..9 the bevels between the top and the sides.
+// Roughness tilts every face more at random.
+vec3 rk_face(float k, vec2 sid, float rough) {
+  float spin = rk_hash(sid + 0.5) * 6.2832;
+  float az;
+  float el;
+  if (k < 0.5) {
+    az = 0.0;
+    el = 1.5708;
+  } else if (k < 6.5) {
+    az = spin + k * 1.0472;
+    el = 0.3;
+  } else {
+    az = spin + 0.5 + k * 2.0944;
+    el = 0.85;
+  }
+  az += (rk_hash(sid + vec2(k, 1.7)) - 0.5) * 0.9 * rough;
+  el += (rk_hash(sid + vec2(k, 4.3)) - 0.5) * 0.6 * rough;
+  return vec3(cos(az) * cos(el), sin(az) * cos(el), sin(el));
+}
+
+// The top of the ground in this column: the first filled cell from the
+// top of the grid down, or the floor (0).
+float rk_ground(vec2 col) {
+  vec2 c = floor(col) + 0.5;
+  for (int k = 0; k < 256; k++) {
+    float z = i_volume_size.z - 0.5 - float(k);
+    if (z < 0.0) break;
+    if (voxel(vec3(c, z)) > 0.0) return z + 0.5;
+  }
+  return 0.0;
+}
+
+float map(vec3 v) {
+  vec3 p = floor(v) + 0.5;
+  vec2 shift = vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  p.xy += shift;
+  float rough = m_roughness / 100.0;
+  // Never wider than the grid: a grid smaller than the rock spacing still gets its rock.
+  float spacing = min(m_size * 2.5, min(i_volume_size.x, i_volume_size.y));
+  vec2 g = floor(p.xy / spacing);
+  for (int i = -2; i <= 2; i++) {
+    for (int j = -2; j <= 2; j++) {
+      vec2 id = g + vec2(float(i), float(j));
+      vec2 sid = id + vec2(m_seed * 13.7, m_seed * 5.3);
+      if (rk_hash(sid) * 100.0 >= m_density) continue;
+      vec2 c = (id + 0.2 + 0.6 * vec2(rk_hash(sid + 7.1), rk_hash(sid + 2.9))) * spacing;
+      float r = m_size * (0.75 + 0.7 * rk_hash(sid + 3.3));
+      // No rock crosses the edge of a tile: one that would moves inwards
+      // until it fits, and one wider than the tile is made smaller. Tiles
+      // still meet without a seam, and a single model gets no pieces of rocks
+      // that stand outside it.
+      vec2 home = floor(c / i_volume_size.xy) * i_volume_size.xy;
+      r = min(r, (min(i_volume_size.x, i_volume_size.y) * 0.5 - 1.5) / 1.3);
+      if (r < 1.0) continue;
+      float reach = r * 1.3 + 1.0;
+      c = clamp(c, home + reach, home + i_volume_size.xy - reach);
+      float squash = 0.5 + 0.3 * rk_hash(sid + 9.9);
+      if (length(p.xy - c) > reach) continue;
+      // It stands on the ground under its middle (the floor of an empty
+      // grid), its widest part a little sunk into it.
+      float base = rk_ground(c - shift) - r * squash * 0.15;
+      vec3 d = (p - vec3(c, base)) / vec3(1.0, 1.0, squash);
+      if (length(d) > reach) continue;
+      // Inside when inside every face. The face the cell is nearest to
+      // (the largest share of its distance) is the face it shows.
+      float best = -1000.0;
+      float face = 0.0;
+      vec3 fn = vec3(0.0, 0.0, 1.0);
+      bool inside = true;
+      for (int k = 0; k < 10; k++) {
+        vec3 n = rk_face(float(k), sid, 0.35 + rough);
+        float dist = r * (0.82 + 0.3 * rough * rk_hash(sid + vec2(float(k), 6.1)));
+        if (k == 0) dist *= 0.8;  // a flat top
+        float t = dot(d, n) / dist;
+        if (t > 1.0) { inside = false; break; }
+        if (t > best) { best = t; face = float(k); fn = n; }
+      }
+      if (!inside) continue;
+      // Moss in patches on the faces that look up.
+      if (fn.z > 0.55 && rk_noise(p * 0.35 + vec3(sid, 1.0)) * 100.0 < m_moss * 1.3 - 5.0 + fn.z * 10.0) {
+        return i_color_index + 4.0;
+      }
+      // The shade: by the direction the face looks, then a step lighter or
+      // darker at random for each face.
+      float shade = fn.z > 0.6 ? 0.0 : (fn.z > -0.05 ? 1.0 : 2.0);
+      float jitter = rk_hash(sid + vec2(face, 8.8));
+      if (jitter < 0.25 && shade < 2.5) shade += 1.0;
+      if (jitter > 0.85 && shade > 0.5) shade -= 1.0;
+      return i_color_index + shade;
+    }
+  }
+  return voxel(v);
+}

@@ -1,0 +1,353 @@
+// xs nature/autumn_grove [Density] [Size] [Birch Share] [Clearings] [Grass Only] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Density'    var = 'm_density' range = '0 100'     value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Size'       var = 'm_size'  range = '6 60'      value = '18'   step = '1'  precision = '0' }
+// arg : { name = 'Birch Share' var = 'm_mix'   range = '0 100'     value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Clearings'  var = 'm_clear' range = '0 100'     value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Grass Only' var = 'm_grass' range = '0 1'       value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'  range = '0 9999'    value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A grove in autumn: red and gold leaves and white birches'
+// rok_flags : 'joined'
+// rok_colours : { start = '0'  rgb = '4A3222 6E4A30 E4E0D4 3A3A38 8E2A17 C2401C E0781F F0B429 F7DC6F' }
+// rok_tip Density : How many of the possible tree places get a tree, in percent. 0 gives no tree, 100 fills every
+// rok_tip Density : place. The places are 0.7 Size apart (at least 4 cells), so a small grid has few places and the
+// rok_tip Density : count changes in steps. On a grid narrower than 3 spacings the tree in the middle always stands,
+// rok_tip Density : even at 0. Trees near the grid sides are made smaller to fit, and a tree under 5 cells high is
+// rok_tip Density : dropped.
+// rok_tip Size : A tree's height in cells, and the space between trees (0.7 times Size). Each tree is 0.75 to
+// rok_tip Size : 1.25 times Size high. Low values give many small trees, high values give few big ones. A tree
+// rok_tip Size : never grows taller than the free height in the grid allows, so on a low grid a high Size only
+// rok_tip Size : widens the spacing. Trees near the grid sides are made smaller to fit.
+// rok_tip Birch Share : How many of the trees are birches, in percent. The rest are leafy trees in red, orange or
+// rok_tip Birch Share : yellow. 0 gives no birch, 100 only birches. Each place is a random draw, so on a grid with few
+// rok_tip Birch Share : places the share is only roughly kept.
+// rok_tip Clearings : How much of the ground stays bare, in percent. The bare patches are about 2.5 Size wide. Below
+// rok_tip Clearings : about 30 it changes little. From about 60 it removes most trees, and at 100 few or none are
+// rok_tip Clearings : left. On a grid not much wider than one patch it removes whole areas at once. It never removes
+// rok_tip Clearings : the tree in the middle of a grid narrower than 3 tree spacings.
+// rok_tip Grass Only : 0 lets trees stand on any ground except water (a clearly blue colour). 1 lets them stand
+// rok_tip Grass Only : only on green ground or dark brown earth. It keeps them off grey rock, concrete, snow, light
+// rok_tip Grass Only : sand, yellow and red ground. Needs ground in the model; on an empty grid it changes nothing.
+// rok_tip Seed : Picks another random layout of the same kind. Any whole number from 0 to 9999. The same seed
+// rok_tip Seed : always gives the same result.
+// Rok puts these colours in the palette from the selected colour on: dark
+// and light bark, birch white, birch flecks, then deep red, red, orange,
+// yellow and light yellow leaves.
+
+// A grove in autumn: leafy trees and slim white birches. Birch Share is how
+// many of the trees are birches. Each leafy tree turns one colour, red,
+// orange or yellow, in three shades: dark under the crown, light on top. A
+// birch has a white trunk with dark flecks and a tall, narrow yellow crown.
+//
+// Trees are planted on the ground the model already has: each stands on the
+// highest filled cell below it, or on the floor of an empty grid. None stands
+// on water (a blue colour); Grass Only keeps them off grey rock, snow, sand and red ground too. Size is a
+// tree's height in cells, Density how many of the places for a tree have one,
+// Clearings how much of the ground is left bare in patches. A grid narrower
+// than three tree spacings always has a tree in its middle. The voxels already there stay.
+// For a closed wood, set Density to 100 and Clearings to 0. The trees stand
+// 0.7 Size apart, so a smaller Size gives more and smaller trees; the
+// smallest tree is 5 cells high.
+
+// ---- The tree kit: the same in trees, foliage, woodland, pine_forest,
+// autumn_grove and jungle. A change here belongs in all six. ----
+
+float fo_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float fo_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float fo_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(fo_hash3(i), fo_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(fo_hash3(i + vec3(0.0, 1.0, 0.0)), fo_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(fo_hash3(i + vec3(0.0, 0.0, 1.0)), fo_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(fo_hash3(i + vec3(0.0, 1.0, 1.0)), fo_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// The sun comes from above and from the front left of the usual view (-y).
+// Leaves that face it get the light colour, leaves that face away the dark one.
+vec3 fo_sun() { return vec3(0.0, -0.53, 0.85); }
+
+// The angle of o around the trunk. atan(0, 0) is not defined and comes out
+// as NaN on some GPUs, which passes every test after it: the cell on the
+// axis gets a tiny nudge.
+float fo_angle(vec2 o) { return atan(o.y, o.x + 0.0001); }
+
+// The distance from p to the segment a-b: for branches.
+float fo_seg(vec3 p, vec3 a, vec3 b) {
+  vec3 pa = p - a;
+  vec3 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.001), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+// A crown of leaf clumps. q is the cell's place from the crown's middle, rad
+// its half width (x) and half height (y), p the cell in the world (for the
+// noise). Seven round clumps: one big one in the middle, six around it.
+// lumps (0..1) is how far the six stand out, leaf the size of the bumps on
+// the skin in cells, holes (0..1) how many gaps the skin has. The gaps are
+// one cell deep, so no leaf comes loose. Returns the leaf shade: 2 dark,
+// 3 middle, 4 light; -1 outside. The shade comes from the side the leaf
+// faces (its clump's side and the whole crown's side), so each clump has a
+// light top and a dark underside and the crown reads as round, not as noise.
+float fo_crown(vec3 q, vec2 rad, float lumps, float leaf, float holes, float s, vec3 p) {
+  float best = -1000.0;
+  vec3 bc = vec3(0.0);
+  float squash = rad.x / max(rad.y, 1.0);
+  for (int k = 0; k < 7; k++) {
+    float fk = float(k);
+    vec3 cc = vec3(0.0, 0.0, rad.y * 0.2);
+    float r = rad.x * (0.85 - 0.35 * lumps);
+    if (k > 0) {
+      float a = fk * 1.0472 + fo_hash(vec2(s, fk)) * 0.8;
+      float out_ = (0.55 + 0.2 * fo_hash(vec2(s, fk + 9.0))) * lumps;
+      float h = (fo_hash(vec2(s, fk + 19.0)) - 0.65) * 0.8;
+      cc = vec3(cos(a) * rad.x * out_, sin(a) * rad.x * out_, h * rad.y);
+      r = rad.x * (0.36 + 0.12 * fo_hash(vec2(s, fk + 29.0)));
+    }
+    vec3 d = q - cc;
+    d.z *= squash;
+    float f = r - length(d);
+    if (f > best) { best = f; bc = cc; }
+  }
+  // The leafy skin: bumps about leaf/2 cells high.
+  float fq = 1.2 / max(leaf, 1.0);
+  float n = (fo_noise(p * fq + vec3(s)) - 0.5) * (0.6 + 0.45 * leaf) + (fo_noise(p * 0.9 + vec3(s * 1.3)) - 0.5) * 0.5;
+  float e = best + n;
+  if (e < 0.0) return -1.0;
+  if (e < 1.0 && fo_noise(p * 0.7 + vec3(s * 2.1)) < holes * 0.55) return -1.0;
+  vec3 a = q - bc;
+  vec3 b = q / vec3(rad.x, rad.x, rad.y);
+  vec3 nrm = normalize(a + vec3(0.0, 0.0, 0.001)) * 0.65 + normalize(b + vec3(0.0, 0.0, 0.001)) * 0.35;
+  float lit = dot(nrm, fo_sun()) + (fo_hash3(floor(p) + vec3(s)) - 0.5) * 0.2 + n * 0.06;
+  if (lit > 0.38) return 4.0;
+  if (lit > -0.22) return 3.0;
+  return 2.0;
+}
+
+// Bark: 1 light, 0 dark, -1 outside. A trunk from the ground (rel 0) to top,
+// rt wide (radius), leaning by lean at its top, with a root flare at its
+// foot. The light and dark bark run in streaks along the trunk.
+float fo_trunk(vec2 off, float rel, float top, float rt, vec2 lean, float s) {
+  if (rel < 0.0 || rel > top) return -1.0;
+  float k = rel / max(top, 1.0);
+  vec2 o = off - lean * k * k;
+  float a = fo_angle(o);
+  float foot = max(0.0, 1.0 - rel / max(rt * 2.5, 1.6));
+  float roots = max(0.0, cos(4.0 * a + s)) * foot * foot;
+  float r = rt * (1.0 - 0.3 * k) + rt * foot * 0.5 + roots * (rt + 0.8);
+  if (length(o) > r + 0.05) return -1.0;
+  return fo_hash3(vec3(floor(a * 1.6 + 5.0), floor(rel / 3.0), s)) < 0.35 ? 1.0 : 0.0;
+}
+
+// A leafy tree: 0/1 bark, 2..4 leaves, -1 nothing. c is the middle of its
+// crown (z from the ground), rad the crown's half sizes, rt the trunk's
+// radius. Three branches fork from the trunk into the crown.
+float fo_leafy(vec2 off, float rel, vec3 c, vec2 rad, float lumps, float rt, float s, vec3 p) {
+  vec3 q = vec3(off, rel) - c;
+  float leaf = fo_crown(q, rad, lumps, 3.0, 0.3, s, p);
+  if (leaf >= 0.0) return leaf;
+  float bark = fo_trunk(off, rel, c.z, rt, c.xy, s);
+  if (bark >= 0.0) return bark;
+  // Branches: from the trunk below the crown up and out into it.
+  vec3 fork = vec3(c.xy * 0.6, c.z - rad.y * 0.75);
+  float br = max(0.55, rt * 0.6);
+  for (int k = 0; k < 3; k++) {
+    float a = float(k) * 2.094 + fo_hash(vec2(s, 40.0)) * 6.28;
+    vec3 tip = c + vec3(cos(a) * rad.x * 0.6, sin(a) * rad.x * 0.6, -rad.y * 0.1);
+    if (fo_seg(vec3(off, rel), fork, tip) < br) return 0.0;
+  }
+  return -1.0;
+}
+
+// A fir: 0/1 bark, 2..4 needles, 5 snow, -1 nothing. ht is its height, W the
+// radius of its lowest tier, b the bare trunk below the needles, rag (0..1)
+// how ragged the rims are, snow 0..100. Tiers of boughs, each a skirt: a
+// low cone that bends down at its rim; the top tier ends in a point. The
+// underside of a tier is dark, its top light on the sun side. Snow lies on
+// the tops of the tiers.
+float fo_fir(vec2 off, float rel, float ht, float W, float b, float rag, float snow, float s, vec3 p) {
+  float d = length(off);
+  float rt = max(0.6, W * 0.12);
+  float tiers = clamp(floor((ht - b) / 4.5), 3.0, 7.0);
+  float span = (ht - b) / tiers;
+  float a = fo_angle(off);
+  float face = d > 0.5 ? dot(off / d, fo_sun().xy) : 1.0;
+  for (int i = 6; i >= 0; i--) {
+    float fi = float(i);
+    if (fi >= tiers) continue;
+    float z0 = b + fi * span;
+    bool top = fi + 1.0 >= tiers;
+    float R = W * (1.0 - 0.85 * fi / tiers) + 0.5;
+    // The top tier is a cone, not too steep: a steep one ends in a thin pole
+    // on a grid of cells.
+    if (top) R = max(R, 2.2);
+    float H = top ? min(ht - z0, R * 1.6 + 1.0) : span * 1.6;
+    // The rim is ragged: nine boughs a tier, each its own length.
+    float bough = floor((a / 6.2832 + 0.5) * 9.0 + fo_hash(vec2(s, fi)) * 9.0);
+    R *= 1.0 - 0.2 * rag + 0.32 * rag * fo_hash(vec2(s + fi * 7.0, bough));
+    float u = d / R;
+    if (u > 1.0) continue;
+    // The skirt bends down at the rim, which stays one or two cells thick.
+    float droop = u * u * span * 0.45;
+    // A lower tier is hollow-sided (its top falls fast), the top tier is a
+    // plain cone, so the tip is never a thin spike.
+    float fall = top ? 1.0 - u : pow(1.0 - u, 1.5);
+    float zt = z0 + H * fall - droop;
+    float zb = min(z0 - droop - 1.0, zt - 1.0);
+    if (rel < zb - 0.5 || rel > zt + 0.5) continue;
+    if (rel < zb + 0.5 && u > 0.25) return 2.0;  // the dark underside
+    if (rel > zt - 0.9) {
+      // The top: snow, or light needles on the sun side. Near the trunk
+      // the top faces up, so it is lit from every side.
+      if (snow > 0.5 && fo_noise(p * 0.3 + vec3(s)) * 100.0 < snow * 1.1 + 5.0 - 15.0 * u) return 5.0;
+      return face * u + 0.5 * (1.0 - u) + (fo_hash3(floor(p) + vec3(s)) - 0.5) * 0.3 > -0.15 ? 4.0 : 3.0;
+    }
+    return fo_hash3(floor(p) + vec3(s + 1.0)) < 0.2 ? 2.0 : 3.0;
+  }
+  // The trunk runs up to the top tier, so a slim fir never breaks apart.
+  if (d < rt + 0.05 && rel >= 0.0 && rel < ht - span) {
+    return fo_hash3(vec3(floor(a * 1.6 + 5.0), floor(rel / 3.0), s)) < 0.35 ? 1.0 : 0.0;
+  }
+  return -1.0;
+}
+
+// ---- The ground: the same in woodland, pine_forest, autumn_grove and jungle ----
+
+// The height at which a tree at this column stands: the first cell above a
+// filled one, looking down from z0 for at most `reach` cells; 0 on the grid's
+// floor; -1 when nothing is found.
+float fo_ground(vec2 col, float z0, float reach) {
+  for (int k = 0; k < 160; k++) {
+    if (float(k) > reach) break;
+    float zz = z0 - float(k);
+    if (zz < 0.0) return 0.0;
+    if (voxel(vec3(col, zz + 0.5)) > 0.0) return zz + 1.0;
+  }
+  return -1.0;
+}
+
+// Can a tree stand on this ground? Never on water (a blue colour); with
+// Grass Only, only on green ground or dark brown earth (not on grey rock,
+// snow, light sand or red ground).
+bool fo_ok(float base, vec2 col) {
+  if (base < 0.5) return true;
+  vec4 c = palette(voxel(vec3(col, base - 0.5)));
+  if (c.b > c.r + 0.12 && c.b > c.g) return false;
+  if (m_grass > 0.5) {
+    float hi = max(c.r, max(c.g, c.b));
+    float lo = min(c.r, min(c.g, c.b));
+    bool grey = hi - lo < 0.15 * hi;  // rock, concrete, snow
+    bool green = c.g >= c.r * 0.97 && c.g >= c.b;
+    bool soil = c.r >= c.g && c.g >= c.b && hi < 0.5;  // dark brown earth
+    if (grey || !(green || soil)) return false;
+  }
+  return true;
+}
+
+// The distance between trees as a share of Size.
+float fo_spacing() { return 0.7; }
+
+// A tree's height as a share of Size.
+float fo_size(float s) { return 0.75 + 0.5 * fo_hash(vec2(s, 3.9)); }
+
+// How far a crown reaches from the trunk, as a share of the tree's height.
+float fo_reach(float s) { return 0.42; }
+
+// The leaf colour for shade t (2 dark .. 4 light) of a tree of hue h
+// (0 red, 1 orange, 2 yellow): its three shades are three neighbours in the
+// run deep red, red, orange, yellow, light yellow. A few leaves take the
+// next hue, so a crown is not flat.
+float fo_autumn(float t, float h, vec3 p, float s) {
+  float k = 4.0 + h + (t - 2.0);
+  if (fo_hash3(floor(p) + vec3(s * 1.7)) < 0.08) k += 1.0;
+  return min(k, 8.0);
+}
+
+// One tree: bark 0..1, birch white 2 and flecks 3, leaves 4..8.
+float fo_tree(vec2 off, float rel, float ht, float s, vec3 p) {
+  vec2 lean = (vec2(fo_hash(vec2(s, 6.1)), fo_hash(vec2(s, 6.2))) - 0.5) * ht * 0.12;
+  if (fo_hash(vec2(s, 5.5)) * 100.0 < m_mix) {
+    // A birch: slim and tall, with a narrow crown.
+    vec2 rad = vec2(ht * 0.2, ht * 0.34);
+    vec3 c = vec3(lean, ht - rad.y * 0.9);
+    float t = fo_leafy(off, rel, c, rad, 0.5, 0.5, s, p);
+    if (t >= 2.0) return fo_autumn(t, 2.0, p, s);
+    if (t < 0.0) return -1.0;
+    // White bark with dark flecks: short dashes across the trunk.
+    return fo_hash(vec2(floor(rel), s + floor(fo_angle(off) * 1.3))) < 0.2 ? 3.0 : 2.0;
+  }
+  vec2 rad = vec2(ht * 0.36 * (0.85 + 0.3 * fo_hash(vec2(s, 4.4))), ht * 0.32);
+  vec3 c = vec3(lean, ht - rad.y * 0.9);
+  float t = fo_leafy(off, rel, c, rad, 0.65, max(0.5, ht * 0.05), s, p);
+  if (t >= 2.0) return fo_autumn(t, floor(fo_hash(vec2(s, 7.7)) * 2.99), p, s);
+  return t;
+}
+
+// Nothing grows between the trees.
+float fo_cover(vec3 p) { return -1.0; }
+
+// ---- Planting: the same in woodland, pine_forest, autumn_grove and jungle ----
+
+// Each tree has a place in a grid of cells fo_spacing() Size wide, moved at random
+// inside its cell. A cell is looked at with its eight neighbours, so a
+// crown may reach as far as one cell. A tree near the grid's side is made
+// smaller until its crown fits, so no crown is cut off flat.
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here > 0.0) return here;
+  vec3 p = floor(v) + 0.5;
+  vec3 size = i_volume_size;
+  float spacing = max(m_size * fo_spacing(), 4.0);
+  // A grid smaller than three tree spacings always gets a tree in its middle.
+  bool small = min(size.x, size.y) < spacing * 3.0;
+  vec2 g = floor(p.xy / spacing);
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      vec2 id = g + vec2(float(i), float(j));
+      float s = dot(id, vec2(12.9898, 78.233)) + m_seed * 17.3;
+      vec2 cc = floor((id + 0.15 + 0.7 * vec2(fo_hash(vec2(s, 1.3)), fo_hash(vec2(s, 2.6)))) * spacing) + 0.5;
+      vec2 mid = floor(size.xy * 0.5 / spacing);
+      bool forced = small && id.x == mid.x && id.y == mid.y;
+      if (forced) cc = floor(size.xy * 0.5) + 0.5;
+      if (!forced) {
+        if (fo_hash(vec2(s, 0.7)) > m_density / 100.0) continue;
+        // Clearings: where a slow noise is low there are no trees.
+        vec2 cq = cc / (m_size * 2.5) + vec2(7.3, 2.9);
+        float patch = 0.65 * fo_noise(vec3(cq, m_seed * 0.37 + 5.1)) + 0.35 * fo_noise(vec3(cq * 2.3, m_seed * 0.37 + 9.7));
+        if (patch < m_clear / 100.0 * 0.7) continue;
+      }
+      vec2 off = p.xy - cc;
+      float h0 = m_size * fo_size(s);
+      vec2 room = min(cc, size.xy - cc) - 1.0;
+      h0 = min(h0, (min(room.x, room.y) - 1.5) / fo_reach(s));
+      float reach = h0 * fo_reach(s) + 1.5;
+      if (dot(off, off) > reach * reach) continue;
+      float base = fo_ground(cc, floor(p.z), h0 * 1.25 + 2.0);
+      if (base < 0.0 || !fo_ok(base, cc)) continue;
+      float rel = p.z - base;
+      // A tree that would reach the top of the grid is made smaller.
+      float ht = min(h0, (size.z - base - 2.0) / 1.12);
+      if (ht < 5.0 || rel > ht * 1.12 + 1.0) continue;
+      float tone = fo_tree(off, rel, ht, s, p);
+      if (tone >= 0.0) return i_color_index + tone;
+    }
+  }
+  float cover = fo_cover(p);
+  if (cover >= 0.0) return i_color_index + cover;
+  return here;
+}

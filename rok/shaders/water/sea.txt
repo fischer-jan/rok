@@ -1,0 +1,135 @@
+// xs water/sea [Level] [Depth] [Ripples] [Ripple Size] [Foam] [Patches] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Level'        var = 'm_level'   range = '1 100'   value = '40'  step = '1'  precision = '0' }
+// arg : { name = 'Depth'        var = 'm_depth'   range = '2 40'    value = '12'  step = '1'  precision = '0' }
+// arg : { name = 'Ripples'      var = 'm_ripples' range = '0 100'   value = '50'  step = '1'  precision = '0' }
+// arg : { name = 'Ripple Size'  var = 'm_rsize'   range = '3 40'    value = '6'  step = '1'  precision = '0' }
+// arg : { name = 'Foam'         var = 'm_foam'    range = '0 100'   value = '70'  step = '1'  precision = '0' }
+// arg : { name = 'Patches'      var = 'm_patches' range = '0 100'   value = '50'  step = '1'  precision = '0' }
+// arg : { name = 'Seed'         var = 'm_seed'    range = '0 9999'  value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A clear sea with foam and ripples at the shore'
+// rok_colours : { start = '0'  rgb = 'F7FCFF CFEFF9 8FEAE6 46D0DE 22A6DC 1979C9 1150A8 0C3A86'  names = 'Foam, Ripple, Shallows, Turquoise, Light blue, Blue, Deep blue, Deepest blue'  glass = '0 0.35 0.85 0.78 0.68 0.58 0.48 0.4' }
+// Rok puts these colours in the palette; the water colours are glass, the
+// clearer the shallower, so sand shows through near the shore in the rendered
+// view.
+// rok_tip Level : The height of the sea surface as a percent of the grid height. Every empty cell below it fills with water, also closed caves and the inside of buildings. The surface is a whole layer, so on a grid under 100 cells tall a low Level such as 1 gives no water.
+// rok_tip Depth : How many cells of water over the ground give the deepest blue. It changes only the colours: shallow water over sand is turquoise and clear, and water this deep or deeper is dark blue. A high value keeps the whole sea light.
+// rok_tip Ripples : How many thin white ripple lines the surface gets, in percent. 0 gives none. 100 gives a full net of lines. Only the top layer of water changes colour.
+// rok_tip Ripple Size : How far apart the ripple lines are, in cells. Small values give a fine net, large values a wide one. No effect when Ripples is 0.
+// rok_tip Foam : How much surf the shore gets, in percent: a solid band where the water meets the ground, a broken band further out and a line of breaking water about 4 cells out. 0 gives none. Needs ground within 4 cells of the surface; the grid's sides are not a shore, so open water far from land gets no foam.
+// rok_tip Patches : How strongly the water colours are mottled in soft blocks, in percent. 0 gives clean bands by depth. It changes only colours.
+// rok_tip Seed : Picks another random layout of the ripples, the foam edges and the colour patches. It changes only colours, not where the water is.
+
+// Fills every empty cell below Level, a share of the grid's height, with sea
+// water: around an island, along a beach, up to the grid's walls. It only adds
+// voxels, and never above Level.
+//
+// The colour follows how much water there is over the ground: turquoise and
+// clear over the shallows, through light blue to deep blue where it is Depth
+// cells deep or more. Each layer under the surface is a little darker too, so
+// the side of a cut shows the sea in bands. Patches mottles the colours in
+// soft blocks, as light does on moving water.
+//
+// On the surface, Ripples draws thin white lines where small waves catch the
+// light; Ripple Size is how far apart they are. Foam draws the surf along the
+// shore: a solid band where the water meets the beach, a broken one a little
+// further out, and a second line of breaking water beyond it.
+
+float se_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float se_noise(vec2 p) {
+  vec3 q = vec3(p, m_seed * 1.91);
+  vec3 i = floor(q);
+  vec3 f = q - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(se_hash3(i), se_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(se_hash3(i + vec3(0.0, 1.0, 0.0)), se_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  return mix(a, b, u.y);
+}
+
+// The bright edges of small waves: a net of thin lines along the borders of
+// irregular cells, Ripple Size across, broken in places. 1 on a line, 0 off it.
+float se_lines(vec2 p) {
+  vec2 cell = floor(p);
+  vec2 f = p - cell;
+  float d1 = 9.0;
+  float d2 = 9.0;
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      vec2 o = vec2(float(i), float(j));
+      vec2 c = cell + o;
+      vec2 at = o + vec2(se_hash3(vec3(c, 3.0)), se_hash3(vec3(c, 9.0))) * 0.85 + 0.075;
+      float d = length(at - f);
+      if (d < d1) {
+        d2 = d1;
+        d1 = d;
+      } else if (d < d2) {
+        d2 = d;
+      }
+    }
+  }
+  float edge = d2 - d1;
+  float keep = se_noise(p * 1.7 + 5.0);
+  float width = 0.9 / m_rsize;  // about one cell wide, whatever the size
+  return (edge < width && keep > 1.0 - m_ripples / 100.0) ? 1.0 : 0.0;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here > 0.0) return here;
+  float level = floor(i_volume_size.z * m_level / 100.0 + 0.001);  // 40 % of 20 is 8, not 7.99
+  float z = floor(v.z);
+  if (z >= level) return 0.0;
+  vec2 xy = floor(v.xy) + 0.5;
+  float surface = level - 1.0;
+
+  // The water over the ground in this column, at most Depth (and one more,
+  // so the deepest colour still has room).
+  float water = m_depth + 1.0;
+  for (int k = 0; k < 48; k++) {
+    if (float(k) > m_depth) break;
+    float zz = surface - float(k);
+    if (zz < 0.0 || voxel(vec3(xy, zz + 0.5)) > 0.0) {
+      water = float(k);
+      break;
+    }
+  }
+  float below = surface - z;  // 0 at the surface layer
+  float patch = (se_noise(xy / 3.5 + 101.0) - 0.5) * 0.35 * m_patches / 100.0;
+  float t = clamp((water + 0.5 * below) / (m_depth * 1.2) + patch, 0.0, 1.0);
+
+  if (below < 0.5) {
+    if (m_foam > 0.0) {
+      // The distance to the shore: the nearest ground beside the surface layer.
+      float shore = 9.0;
+      for (int i = -4; i <= 4; i++) {
+        for (int j = -4; j <= 4; j++) {
+          vec3 at = vec3(xy + vec2(float(i), float(j)), z + 0.5);
+          if (voxel(at) > 0.0 || voxel(at + vec3(0.0, 0.0, 1.0)) > 0.0) {
+            shore = min(shore, length(vec2(float(i), float(j))));
+          }
+        }
+      }
+      float rough = se_noise(xy / 2.0 + 51.0);
+      float f = m_foam / 100.0;
+      if (shore <= 1.0 + 1.2 * f * rough) return i_color_index;
+      if (shore <= 3.0 && rough > 1.0 - 0.7 * f) return i_color_index;
+      float line = abs(shore - 4.0 - (rough - 0.5) * 1.5);
+      if (line < 0.6 && se_noise(xy / 1.3 + 77.0) > 1.0 - 0.6 * f) return i_color_index + 1.0;
+    }
+    if (m_ripples > 0.0 && se_lines(xy / m_rsize) > 0.5) return i_color_index + 1.0;
+  }
+  if (t < 0.1) return i_color_index + 2.0;
+  if (t < 0.24) return i_color_index + 3.0;
+  if (t < 0.42) return i_color_index + 4.0;
+  if (t < 0.62) return i_color_index + 5.0;
+  if (t < 0.82) return i_color_index + 6.0;
+  return i_color_index + 7.0;
+}

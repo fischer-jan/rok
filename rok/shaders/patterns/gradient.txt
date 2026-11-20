@@ -1,0 +1,73 @@
+// xs patterns/gradient [Mode] [Axis] [Dither] [Reverse] [Seed] [Pattern]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Mode'     var = 'm_mode'     range = '0 1'     value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Axis'     var = 'm_axis'     range = '0 2'     value = '2'   step = '1'  precision = '0' }
+// arg : { name = 'Dither'   var = 'm_dither'   range = '0 100'   value = '60'  step = '1'  precision = '0' }
+// arg : { name = 'Reverse'  var = 'm_reverse'  range = '0 1'     value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Pattern'  var = 'm_pattern'  range = '0 1'     value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Paints a gradient through the selected colours'
+// rok_tip Mode : 0 runs the gradient along Axis. 1 runs it out from the centre of the grid. The ends come from the size of the grid, not from the size of the model.
+// rok_tip Axis : The direction of the gradient: 0 x, 1 y, 2 z. It works only when Mode is 0. The gradient spans the whole grid, so a model that fills only part of the grid shows only part of the colours.
+// rok_tip Dither : How wide the mix is where two neighbour colours meet. 0 gives hard steps. 100 mixes across a whole band. Pattern has no visible effect at 0.
+// rok_tip Reverse : 1 runs the gradient the other way, from the last colour to the first.
+// rok_tip Seed : Picks another random layout of the mix. It works only when Pattern is 1 and Dither is above 0.
+// rok_tip Pattern : 0 mixes the colours in an ordered 4 by 4 pattern, which reads clean on flat faces. 1 mixes them at random. At Dither 0 both give the same result.
+
+// Paints the voxels that are there with a gradient through the selected
+// colours, first to last. Mode 0 runs along Axis (0 x, 1 y, 2 z), Mode 1 out
+// from the centre of the grid. Reverse runs it the other way.
+//
+// Dither mixes two neighbouring colours where they meet, so the steps do
+// not show; at 100 the mix spans a whole band. Pattern 0 mixes them in an
+// ordered 4 x 4 pattern, as pixel art does: it reads clean on flat faces.
+// Pattern 1 mixes them at random (Seed picks the random).
+//
+// The ordered pattern lies in the plane of the face a voxel shows: (x + y, z)
+// on a wall, (x, y) on a floor. So it looks the same on every side.
+
+float gd_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// The 2 x 2 and 4 x 4 Bayer matrices: a threshold from 0 to 1 per cell.
+float gd_bayer2(vec2 a) {
+  a = floor(a);
+  return fract(a.x / 2.0 + a.y * a.y * 0.75);
+}
+
+float gd_bayer4(vec2 a) {
+  return gd_bayer2(0.5 * a) * 0.25 + gd_bayer2(a) + 0.0625 * 0.5;
+}
+
+float map(vec3 v) {
+  if (voxel(v) == 0.0) return 0.0;
+  vec3 c = floor(v);
+  vec3 p = c + 0.5;
+  vec3 size = i_volume_size;
+  float t;
+  if (m_mode < 0.5) {
+    t = m_axis < 0.5 ? p.x / size.x : (m_axis < 1.5 ? p.y / size.y : p.z / size.z);
+  } else {
+    t = min(length((p - size * 0.5) / (size * 0.5)), 1.0);
+  }
+  if (m_reverse > 0.5) t = 1.0 - t;
+  float threshold;
+  if (m_pattern < 0.5) {
+    bool side = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0
+      || voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+    bool capped = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+    vec2 uw = capped && !side ? c.xy : vec2(c.x + c.y, c.z);
+    threshold = fract(gd_bayer4(uw));
+  } else {
+    threshold = gd_hash3(p + m_seed);
+  }
+  float n = float(max(i_num_color_sels, 1));
+  float f = t * n + (threshold - 0.5) * m_dither / 100.0;
+  return color_sel(clamp(floor(f), 0.0, n - 1.0));
+}

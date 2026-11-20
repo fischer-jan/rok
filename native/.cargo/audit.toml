@@ -1,0 +1,12 @@
+# Settings for `cargo audit`. The audit step of scripts/check.sh fails for a
+# vulnerable, unsound or yanked crate. The two unsound notices below have no
+# fix that Rok can take, so the audit skips them.
+[advisories]
+ignore = [
+    # glib 0.18 comes with the GTK 3 bindings, which the menu bar and the file
+    # dialogs use on Linux. The fix is in a glib that those bindings cannot use.
+    "RUSTSEC-2024-0429",
+    # lru 0.16 comes with glyphon, the text renderer. The fix is in a later
+    # lru that glyphon 0.12 does not accept.
+    "RUSTSEC-2026-0253",
+]

@@ -1,0 +1,153 @@
+// xs nature/craters [Tile X] [Tile Y] [Height] [Crater Size] [Density] [Depth] [Roughness] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'       var = 'm_tile_x'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'       var = 'm_tile_y'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'       var = 'm_height'   range = '10 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Crater Size'  var = 'm_size'     range = '6 200'    value = '36'   step = '1'  precision = '0' }
+// arg : { name = 'Density'      var = 'm_density'  range = '0 100'    value = '65'   step = '1'  precision = '0' }
+// arg : { name = 'Depth'        var = 'm_depth'    range = '0 100'    value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Roughness'    var = 'm_rough'    range = '0 100'    value = '40'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'         var = 'm_seed'     range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A cratered moonscape with raised rims and dark floors'
+// rok_colours : { start = '0'  rgb = 'B9B6AE 8F8C86 5F5D5A 3F3E3C D8D5CC A8C4D8' }
+// Rok puts these colours in the palette from the selected colour on: light
+// dust, grey, dark grey, near black, bright rim, ice.
+// rok_tip Tile X : Which tile of a larger world this grid shows, counted in whole grids along x. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Tile Y : Which tile of a larger world this grid shows, counted in whole grids along y. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Height : How high the ground is, as a percent of the grid height. The craters are cut into it. Low values give thin ground and shallow bowls, because a bowl is never deeper than half of the height. 100 gives ground up to the full grid height. The ground is never lower than 4 cells.
+// rok_tip Crater Size : The width of the big craters in cells. The small craters are one third of it. Bigger craters are also further apart. The value is capped at 0.55 times the smaller of the grid width and depth, and it is never under 6. So on a 24 grid, values above 13 change nothing. On a 64 grid, values above 35 change nothing. On a 128 grid, values above 70 change nothing.
+// rok_tip Density : How many of the possible crater places have a crater, in percent. 0 gives no craters, only rolling dust. 100 gives a crater at every place. It acts on the big and the small craters.
+// rok_tip Depth : How deep the bowls go, as a percent of their width. 0 gives no relief, but the colours still mark the craters. A bowl is never deeper than half of the ground height. Ice on the floor of a big bowl appears only when Depth is above 35.
+// rok_tip Roughness : How broken the ground and the rims are. 0 gives smooth dust and even rims. 100 gives small bumps of about 1 cell on the dust and uneven, broken rims.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the craters and the rays.
+
+// Seamless moonscape tiles. Craters sit on a jittered grid of the whole
+// world, so one may lie across a tile edge and both tiles still agree. Each
+// crater has a bowl, a raised rim and a skirt of ejecta with bright rays
+// around it. A second set of craters, a third as big, sits in and between
+// the big ones.
+//
+// Crater Size is the width of the big craters in cells, but never much more
+// than half the grid: a small grid still gets whole craters. Density is how
+// many places have a crater. Depth is how deep the bowls go, as a share of
+// their width. The ground between is rolling grey dust; Roughness makes it
+// and the rims more broken. The floor of a deep bowl holds ice.
+//
+// The colour comes from where a cell sits on its crater, not from its
+// height: dark in the bowl, bright on the rim and the rays, dust between.
+
+float cr_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cr_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = cr_hash(i);
+  float b = cr_hash(i + vec2(1.0, 0.0));
+  float c = cr_hash(i + vec2(0.0, 1.0));
+  float d = cr_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The width of the big craters in cells. All tiles of a set have one size,
+// so the cap keeps them seamless.
+float cr_size() { return max(6.0, min(m_size, 0.55 * min(i_volume_size.x, i_volume_size.y))); }
+
+// The highest the ground gets, in cells.
+float cr_top() { return max(i_volume_size.z * m_height / 100.0, 4.0); }
+
+// One layer of craters of this size at the column col. x: the height it adds
+// in cells. y: how deep in a bowl the column is (0 at the rim, 1 in the
+// middle). z: how much it is on a rim. w: how much it is on a ray.
+vec4 cr_layer(vec2 col, float size, float salt) {
+  float cell = size * 1.5;
+  vec2 g = floor(col / cell);
+  float h = 0.0;
+  float bowl = 0.0;
+  float rimness = 0.0;
+  float ray = 0.0;
+  // The depth of a bowl in cells: Depth, as a share of the crater's width,
+  // but never deeper than the ground is high.
+  float depth = min(m_depth / 100.0 * size * 0.38, cr_top() * 0.5);
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      vec2 id = g + vec2(float(i), float(j));
+      vec2 sid = id + vec2(m_seed * 13.7 + salt, m_seed * 5.3 + salt * 2.0);
+      if (cr_hash(sid) * 100.0 >= m_density) continue;
+      vec2 c = (id + 0.2 + 0.6 * vec2(cr_hash(sid + 7.1), cr_hash(sid + 2.9))) * cell;
+      float k = 0.55 + 0.45 * cr_hash(sid + 3.3);  // this crater's size
+      float radius = size * 0.5 * k;
+      vec2 d2 = col - c;
+      float r = length(d2) / radius;
+      if (r > 2.6) continue;
+      // The rim is a little broken and uneven around the crater.
+      float ang = atan(d2.y, d2.x);
+      float uneven = 1.0 + (cr_noise(vec2(ang * 2.2, cr_hash(sid) * 40.0)) - 0.5) * m_rough / 100.0 * 1.2;
+      float dk = depth * k;
+      // A bowl with a wide floor that rises steeply to the rim.
+      float bowl_h = r < 1.0 ? -dk * (1.0 - pow(r, 2.6)) : 0.0;
+      float rim_h = dk * 0.42 * uneven * exp(-pow((r - 1.0) / 0.2, 2.0));
+      float skirt = r > 1.0 ? dk * 0.15 * exp(-(r - 1.0) * 2.2) : 0.0;
+      h += bowl_h + rim_h + skirt;
+      if (r < 1.0) bowl = max(bowl, 1.0 - r);
+      rimness = max(rimness, exp(-pow((r - 1.0) / 0.13, 2.0)));
+      // Rays: thin bright streaks thrown out from the crater.
+      if (r > 1.05) {
+        float streak = cr_noise(vec2(ang * 5.0 + cr_hash(sid + 9.0) * 20.0, 3.0));
+        ray = max(ray, smoothstep(0.62, 0.8, streak) * exp(-(r - 1.0) * 1.6));
+      }
+    }
+  }
+  return vec4(h, bowl, rimness, ray);
+}
+
+// The ground of a world column. x: its height in cells. y, z, w: as
+// cr_layer gives them, for the big and the small craters together.
+vec4 cr_ground(vec2 column) {
+  float size = cr_size();
+  vec2 p = column + 0.5;
+  float top = cr_top();
+  // Rolling dust: a slow swell, and with Roughness small bumps.
+  float dust = (cr_noise(p / (size * 1.8) + vec2(m_seed)) - 0.5) * 0.18 * top
+             + (cr_noise(p / max(size * 0.15, 3.0) + vec2(4.0, 9.0)) - 0.5) * 2.0 * m_rough / 100.0;
+  vec4 big = cr_layer(p, size, 0.0);
+  vec4 small = cr_layer(p, size / 3.0, 31.0);
+  float h = top * 0.62 + dust + big.x + small.x;
+  // A small bowl never counts as deep: only the big craters hold ice. Only
+  // the big craters throw rays.
+  return vec4(clamp(h, 1.0, top), max(big.y, small.y * 0.62), max(big.z, small.z * 0.8), big.w);
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  vec4 g = cr_ground(column);
+  float ground = floor(g.x);
+  if (z >= ground) return 0.0;
+  float grain = cr_hash(column * 1.37 + vec2(m_seed, z * 0.3));
+  float mottle = cr_noise(column / max(cr_size() * 0.45, 4.0) + vec2(m_seed, 2.0));
+  // Colours from the selected one on: light dust, grey, dark grey, near
+  // black, bright rim, ice.
+  // Under the surface: grey, darker deeper.
+  if (z < ground - 3.0) return z < ground - 9.0 ? i_color_index + 2.0 : i_color_index + 1.0;
+  // In a bowl: ice on the floor of a deep one, dark further down the wall.
+  if (g.y > 0.0) {
+    if (g.y > 0.7 && m_depth > 35.0 && mottle > 0.4) return i_color_index + 5.0;
+    if (g.y > 0.45) return grain > 0.8 ? i_color_index + 2.0 : i_color_index + 3.0;
+    if (g.z > 0.5) return i_color_index + 1.0;  // the inner wall just under the rim
+    return grain > 0.7 ? i_color_index + 3.0 : i_color_index + 2.0;
+  }
+  if (g.z > 0.5) return grain > 0.25 ? i_color_index + 4.0 : i_color_index;  // the bright rim
+  if (g.w > 0.35) return grain > 0.4 ? i_color_index + 4.0 : i_color_index;  // a ray
+  // The dust between: light, with darker patches (the old lava seas).
+  if (mottle < 0.32) return grain > 0.85 ? i_color_index : i_color_index + 1.0;
+  return grain > 0.9 ? i_color_index + 1.0 : i_color_index;
+}

@@ -1,0 +1,14 @@
+// rok_about : 'A short plume under voxels in a marker colour'
+// xs_begin
+// author : 'Rok test'
+// xs_end
+
+// The cell right below a voxel of the current colour gets the colour after
+// it, the cell below that the same. The marker voxels stay.
+float map(vec3 v) {
+  float index = voxel(v);
+  if (index > 0.0) return index;
+  if (voxel(v + vec3(0.0, 0.0, 1.0)) == i_color_index) return i_color_index + 1.0;
+  if (voxel(v + vec3(0.0, 0.0, 2.0)) == i_color_index) return i_color_index + 1.0;
+  return 0.0;
+}

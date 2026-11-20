@@ -1,0 +1,10 @@
+// xs_begin
+// author : 'Rok test'
+// xs_end
+
+// Paints filled voxels with the selected colours in stripes, like noise: it
+// only paints with the selection, so Rok starts it with a run of colours.
+float map(vec3 v) {
+  if (voxel(v) == 0.0) return 0.0;
+  return color_sel(mod(floor(v.x), float(i_num_color_sels)));
+}

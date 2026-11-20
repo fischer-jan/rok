@@ -1,0 +1,91 @@
+// xs patterns/noise_dither [Amount] [Scale] [Only Current] [Seed] [Colours]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Amount'        var = 'm_amount'   range = '0 100'   value = '50'  step = '1'  precision = '0' }
+// arg : { name = 'Scale'         var = 'm_scale'    range = '1 16'    value = '1'   step = '1'  precision = '0' }
+// arg : { name = 'Only Current'  var = 'm_only'     range = '0 1'     value = '1'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'          var = 'm_seed'     range = '0 9999'  value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Colours'       var = 'm_colours'  range = '0 1'     value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Breaks up flat colour with random flecks'
+// rok_tip Amount : Percent of the voxels that change. 0 changes none. 100 changes all of them. Only the voxels that Only Current allows can change.
+// rok_tip Scale : How big a fleck is, in cells. 1 gives single voxels. Higher values give clumps of about that size, each in one colour.
+// rok_tip Only Current : 1 changes only voxels of the current colour. Nothing changes when the model has no voxel of the current colour, so pick a colour that is in the model first. 0 changes voxels of every colour.
+// rok_tip Seed : Picks another random layout of the flecks.
+// rok_tip Colours : 0 paints the flecks in the selected colours (by default the current colour and the next three palette colours). With one selected colour all flecks get that colour. 1 paints a lighter or darker shade of the voxel's own colour. A voxel whose colour has no near shade in the palette stays as it is.
+
+// Breaks up flat areas of colour with flecks. Amount is how many voxels
+// change. Scale is how big a fleck is: 1 is single voxels, more makes
+// irregular clumps of about that size, each clump one colour. With Only
+// Current 1 just the voxels of the current colour change, with 0 every
+// voxel does.
+//
+// Colours 0 paints the flecks in the selected colours, at random. Colours 1
+// paints them in a lighter or a darker shade of each voxel's own colour,
+// the nearest the palette has: the subtle grain of stone, wood or metal.
+// A voxel whose colour has no such shade in the palette stays as it is.
+
+float nd_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// The clump the cell at p is in: the nearest of the jittered points, one
+// in each Scale-sized box (a Voronoi cell). Returns the box of that point.
+vec3 nd_clump(vec3 p) {
+  vec3 box = floor(p / m_scale);
+  vec3 best = box;
+  float best_d = 1e9;
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int k = -1; k <= 1; k++) {
+        vec3 b = box + vec3(float(i), float(j), float(k));
+        vec3 jitter = vec3(nd_hash3(b + 0.1), nd_hash3(b + 7.3), nd_hash3(b + 13.9));
+        vec3 d = (b + jitter) * m_scale - p;
+        float dd = dot(d, d);
+        if (dd < best_d) { best_d = dd; best = b; }
+      }
+    }
+  }
+  return best;
+}
+
+// A shade of the colour in slot here: lighter when up is true, else darker.
+// It is the palette colour nearest to the wanted one among those that
+// really are lighter (or darker); hue counts twice as much as brightness,
+// so a shade keeps its hue. Here itself when none is near enough.
+float nd_shade(float here, bool up) {
+  vec3 c = palette(here).rgb;
+  vec3 w = vec3(0.299, 0.587, 0.114);
+  float lc = dot(c, w);
+  vec3 want = up ? mix(c, vec3(1.0), 0.3) : c * 0.75;
+  float best = here;
+  float best_d = 0.06;
+  for (int i = 1; i < 256; i++) {
+    vec3 q = palette(float(i)).rgb;
+    float dl = dot(q, w) - lc;
+    if (up ? dl < 0.025 : dl > -0.025) continue;
+    vec3 d = q - want;
+    float l = dot(d, w);
+    vec3 hue = d - l;
+    float dist = l * l + 2.0 * dot(hue, hue);
+    if (dist < best_d) { best_d = dist; best = float(i); }
+  }
+  return best;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here == 0.0) return 0.0;
+  if (m_only > 0.5 && here != i_color_index) return here;
+  vec3 p = floor(v) + 0.5;
+  vec3 id = m_scale > 1.0 ? nd_clump(p) : p;
+  id += m_seed * 3.3;
+  if (nd_hash3(id + 17.0) * 100.0 >= m_amount) return here;
+  float r = nd_hash3(id * 1.7 + 5.0);
+  if (m_colours > 0.5) return nd_shade(here, r > 0.5);
+  float n = float(max(i_num_color_sels, 1));
+  return color_sel(clamp(floor(r * n), 0.0, n - 1.0));
+}

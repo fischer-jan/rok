@@ -1,0 +1,154 @@
+// xs nature/mountains [Tile X] [Tile Y] [Height] [Scale] [Ruggedness] [Snow Line] [Warp] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'      var = 'm_tile_x'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'      var = 'm_tile_y'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'      var = 'm_height'   range = '10 100'   value = '90'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'       var = 'm_scale'    range = '20 512'   value = '64'   step = '1'  precision = '0' }
+// arg : { name = 'Ruggedness'  var = 'm_rugged'   range = '0 100'    value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Snow Line'   var = 'm_snow'     range = '0 100'    value = '68'   step = '1'  precision = '0' }
+// arg : { name = 'Warp'        var = 'm_warp'     range = '0 100'    value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'        var = 'm_seed'     range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Sharp mountain ranges with snow, rock and green valleys'
+// rok_colours : { start = '0'  rgb = '6BA84A 3F7A35 8A8078 5E5852 F2F4F7 A89880' }
+// rok_tip Tile X : The number of this tile along x, from 0 to 64. Tile 1 shows the land that lies next to tile 0 on the +x side.
+// rok_tip Tile X : Tiles of one size with the same other settings meet without a seam. At 0 the tile shows the first part of the landscape.
+// rok_tip Tile Y : The number of this tile along y, from 0 to 64. Tile 1 shows the land that lies next to tile 0 on the +y side.
+// rok_tip Tile Y : Tiles of one size with the same other settings meet without a seam.
+// rok_tip Height : How tall the peaks are, in percent of the tallest height allowed. The tallest height is the grid height,
+// rok_tip Height : but never more than 40 percent of the smaller of grid width and depth. On a 64 wide grid, 100 gives peaks of about 23 cells,
+// rok_tip Height : and a taller grid adds nothing. 10 gives low hills. The peaks stay a little below the top, they are not cut flat.
+// rok_tip Scale : The width of the main landforms, in cells. Low values give many narrow ridges. High values give a few wide mountains.
+// rok_tip Scale : Scale is limited to 1.3 times the smaller of grid width and depth, so above that value nothing changes:
+// rok_tip Scale : above 31 on a 24 grid, above 83 on a 64 grid, above 166 on a 128 grid.
+// rok_tip Ruggedness : How much fine detail the ridges carry, from 0 to 100. At 0 the small ridges are weak and the crests are smooth.
+// rok_tip Ruggedness : At 100 they are strong and the crests break up. This changes only the finer shapes, so it moves few cells on a small grid
+// rok_tip Ruggedness : (about 360 cells on a 24 grid, 6000 to 8000 on a 64 grid).
+// rok_tip Snow Line : The height above which snow lies, in percent of the tallest height. Only gentle slopes get snow.
+// rok_tip Snow Line : Steep slopes (3 cells or more of height change to a neighbour) stay bare rock. At 0 snow covers all gentle ground.
+// rok_tip Snow Line : At 100 there is no snow at all.
+// rok_tip Warp : How much a second noise bends the ground sideways, from 0 to 100. At 0 the ridges stay regular and straight.
+// rok_tip Warp : High values give twisting valleys and curved spurs.
+// rok_tip Seed : Picks another random layout of the same kind, from 0 to 9999. It moves the ranges and the valleys, and the patches of forest and scree.
+// Rok puts these colours in the palette from the selected colour on: meadow,
+// forest, rock, dark rock, snow, scree.
+
+// Seamless mountain tiles. The ground of a world column is a ridged
+// multifractal: every octave is sharp on its own and weighs more where the
+// octave before it made a ridge, so the crests carry detail and the flats
+// stay smooth. Warp bends the coordinates with a second noise, which gives the
+// twisting valleys and spurs of eroded rock. A slow noise decides where the
+// ranges stand and where the valleys lie flat. Tiles of one size with the same
+// settings, placed edge to edge in the order of their tile numbers, meet
+// without a seam. Snow Line is the share of the height above which snow lies
+// on the gentle slopes; the steep ones stay bare rock.
+
+float mt_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float mt_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = mt_hash(i);
+  float b = mt_hash(i + vec2(1.0, 0.0));
+  float c = mt_hash(i + vec2(0.0, 1.0));
+  float d = mt_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float mt_fbm(vec2 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  float norm = 0.0;
+  for (int k = 0; k < 4; k++) {
+    sum += amp * mt_noise(p);
+    norm += amp;
+    amp *= 0.5;
+    p = p * 2.03 + vec2(31.7, 11.3);
+  }
+  return sum / norm;
+}
+
+// The tallest the ground gets, in cells: Height is a share of the grid's height, but
+// never more than 40 % of the ground's width, so a tall grid does not give a tower.
+float mt_top() { return min(i_volume_size.z, 0.4 * min(i_volume_size.x, i_volume_size.y)) * m_height / 100.0; }
+
+// The ground height of a world column, in cells.
+float mt_ground(vec2 column) {
+  // Scale in cells, but never much wider than the grid, so a small grid still
+  // gets a mountain and not a flat bit of valley. All tiles of a set have one
+  // size, so this keeps them seamless.
+  float scale = min(m_scale, 1.3 * min(i_volume_size.x, i_volume_size.y));
+  vec2 p = (column + 0.5) / scale + vec2(m_seed * 17.31 + 5.0, m_seed * 7.73 + 3.0);
+  vec2 w = vec2(mt_fbm(p * 0.7 + vec2(3.1, 7.7)), mt_fbm(p * 0.7 + vec2(11.3, 1.9))) - 0.5;
+  p += w * (m_warp / 100.0) * 2.4;
+  float gain = mix(0.38, 0.6, m_rugged / 100.0);
+  float sum = 0.0;
+  float amp = 0.55;
+  float norm = 0.0;
+  float weight = 1.0;
+  vec2 q = p;
+  for (int k = 0; k < 6; k++) {
+    float n = 1.0 - abs(2.0 * mt_noise(q) - 1.0);
+    n *= n;
+    n *= weight;
+    weight = clamp(n * 1.6 + 0.25, 0.0, 1.0);
+    sum += n * amp;
+    norm += amp;
+    amp *= gain;
+    q = q * 2.03 + vec2(19.1, 7.3);
+  }
+  // A soft curve, not a clamp: the highest ridges level off gently and never
+  // end in a flat cut at the top height.
+  float ridge = 1.0 - exp(-2.6 * max((sum / norm - 0.06) / 0.5, 0.0));
+  float broad = mt_fbm(p * 0.45 + vec2(41.0, 13.0));
+  // Ranges where the slow noise is high, lower hills where it is low. The
+  // low parts keep most of their height, so no seed gives a flat field.
+  float h = ridge * (0.65 + 0.35 * smoothstep(0.3, 0.6, broad));
+  h = pow(h, 1.4);
+  // Crags: the higher the ground, the more it breaks up into bumps and gullies,
+  // so a summit is never a smooth dome.
+  h *= 1.0 + (mt_fbm(p * 4.0 + vec2(8.0, 3.0)) - 0.5) * 0.9 * smoothstep(0.25, 0.7, h);
+  // The crags can lift a summit above 1; scale down, so a summit is rarely
+  // cut flat at the top height.
+  h /= 1.25;
+  // The lowlands roll a little instead of lying flat.
+  h += (1.0 - smoothstep(0.0, 0.25, h)) * (mt_fbm(p * 1.8 + vec2(2.0, 5.0)) - 0.35) * 0.16;
+  // Never below the floor: no column is left empty.
+  return 1.0 + clamp(h, 0.02, 1.0) * (mt_top() - 1.0);
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  float ground = floor(mt_ground(column));
+  if (z >= ground) return 0.0;
+  // Under the skin: rock, darker deep down.
+  if (z < ground - 4.0) return i_color_index + (z < ground - 14.0 ? 3.0 : 2.0);
+  float slope = max(
+    max(abs(floor(mt_ground(column + vec2(1.0, 0.0))) - ground),
+        abs(floor(mt_ground(column - vec2(1.0, 0.0))) - ground)),
+    max(abs(floor(mt_ground(column + vec2(0.0, 1.0))) - ground),
+        abs(floor(mt_ground(column - vec2(0.0, 1.0))) - ground)));
+  float top = max(mt_top(), 1.0);
+  float band = ground / top;
+  float speck = mt_hash(column * 1.7 + vec2(m_seed));
+  float snowline = m_snow / 100.0 + (speck - 0.5) * 0.06;
+  if (slope >= 5.0) return i_color_index + 3.0;            // sheer rock
+  if (band > snowline) return slope >= 3.0 ? i_color_index + 2.0 : i_color_index + 4.0;
+  if (slope >= 3.0) return i_color_index + 2.0;
+  if (slope >= 2.0 && band > 0.3) return i_color_index + 5.0;  // scree on the slopes
+  // Patches, not single cells: a slow noise decides where the woods and the
+  // scree lie, so the slopes read as areas.
+  float patch = mt_noise(column / 6.0 + vec2(m_seed * 3.1, 4.0)) + (speck - 0.5) * 0.25;
+  if (band > 0.5) return patch > 0.5 ? i_color_index + 5.0 : i_color_index + 2.0;  // bare high ground
+  if (band > 0.16) return patch > 0.4 - band * 0.4 ? i_color_index + 1.0 : i_color_index;  // forest
+  return patch > 0.75 ? i_color_index + 1.0 : i_color_index;  // meadow with a few trees
+}

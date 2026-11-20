@@ -1,0 +1,2 @@
+steady_hand=on
+steady_length=60

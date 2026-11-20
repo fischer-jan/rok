@@ -1,0 +1,12 @@
+// xs_begin
+// author : 'Rok test'
+// arg : { name = 'Target Color'  var = 'm_target'  range = '0 255'  value = '1'  step = '1'  precision = '0' }
+// arg : { name = 'New Color'  var = 'm_new'  range = '0 255'  value = '7'  step = '1'  precision = '0' }
+// xs_end
+
+// Recolours the voxels of the current colour, like the many xs shaders
+// that work on one colour of the model.
+float map(vec3 v) {
+  float index = voxel(v);
+  return index == i_color_index ? m_new : index;
+}

@@ -1,0 +1,9 @@
+// xs_begin
+// author : 'Rok test'
+// xs_end
+
+// Colour 5 when no axis button is pressed (i_axis all zeros, which many
+// shaders read as "every axis"), colour 6 otherwise. Fills every cell.
+float map(vec3 v) {
+  return all(equal(ivec3(i_axis), ivec3(0))) ? 5.0 : 6.0;
+}

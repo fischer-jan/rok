@@ -1,0 +1,175 @@
+// xs nature/cliffs [Tile X] [Tile Y] [Height] [Scale] [Roughness] [Ledges] [Solid] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'     var = 'm_tile_x'     range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'     var = 'm_tile_y'     range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'     range = '20 100'   value = '85'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'      var = 'm_scale'      range = '20 200'   value = '48'   step = '1'  precision = '0' }
+// arg : { name = 'Roughness'  var = 'm_roughness'  range = '0 100'    value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Ledges'     var = 'm_ledges'     range = '0 12'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Solid'      var = 'm_solid'      range = '0 100'    value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'       range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Rock cliffs with strata, ledges, overhangs and cracks'
+// rok_colours : { start = '0'  rgb = '6FA545 4E8635 C9BBA4 A8987F 8A7A66 6A5D4F 433A33' }
+// Rok puts these colours in the palette from the selected colour on: grass,
+// dark grass, light rock, rock, banded rock, dark rock, shadow.
+// rok_tip Tile X : Which tile of a larger world this grid shows, counted in whole grids along x. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Tile Y : Which tile of a larger world this grid shows, counted in whole grids along y. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Height : How high the tallest plateau stands, as a percent of the grid height. 100 uses the whole grid height. Low values give low rock, but never under 3 cells. A taller cliff also gets thicker rock layers: one layer is one ninth of the height, and at least 2 cells.
+// rok_tip Scale : The width of the plateaus in cells. Small values give many narrow cliffs. Large values give a few wide ones. The value is capped at 1.1 times the smaller of the grid width and depth. So on a 64 grid, values above 70 change nothing. On a 24 grid, values above 26 change nothing.
+// rok_tip Roughness : How far the rock layers move in and out, which gives steps, ledges and overhangs. It also bends the walls and opens thin upright cracks. 0 gives plain walls with no cracks. 100 gives strong ledges and many cracks. Cracks grow with the square of the value, so they show mostly above 50.
+// rok_tip Ledges : The number of levels between the low ground and the highest plateau. 0 gives one tall cliff from the low ground to the plateau. Each added ledge adds one more level and makes each step smaller. 12 gives many small steps.
+// rok_tip Solid : How much of the ground is high plateau. 0 gives mostly low ground with a few small plateaus. 100 gives mostly plateau. It moves the line between low ground and plateau, so the shape of the land also changes a little.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the plateaus, the layers and the cracks.
+
+// Rock cliffs: high plateaus that drop to low ground with steep walls. The
+// voxels already there stay.
+//
+// The ground is a slow noise, cut into flat levels. Between two levels the
+// ground jumps up: that is a cliff. Ledges is the number of levels between
+// the low ground and the highest plateau. Solid is how much of the ground is
+// high plateau. Scale is the size of the plateaus in cells.
+//
+// The rock lies in horizontal layers (strata). Each layer is pushed out or
+// back a little, so a wall has steps, ledges and overhangs, as a real wall of
+// layered rock has. Roughness is how far the layers move. It also bends the
+// walls and opens thin upright cracks. Every value comes from the world
+// position of the cell, so tiles with the same settings and their tile
+// numbers meet without a seam.
+//
+// Colours: grass on the flat tops, light rock on the narrow ledges and the
+// edges, banded rock on the walls, dark rock under the overhangs.
+
+float cf_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cf_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cf_noise2(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(cf_hash(i), cf_hash(i + vec2(1.0, 0.0)), u.x),
+             mix(cf_hash(i + vec2(0.0, 1.0)), cf_hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float cf_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(cf_hash3(i), cf_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(cf_hash3(i + vec3(0.0, 1.0, 0.0)), cf_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(cf_hash3(i + vec3(0.0, 0.0, 1.0)), cf_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(cf_hash3(i + vec3(0.0, 1.0, 1.0)), cf_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// Scale in cells, but never much wider than the grid: a small grid still
+// gets a cliff. All tiles of a set have one size, so this keeps them seamless.
+float cf_scale() { return min(m_scale, 1.1 * min(i_volume_size.x, i_volume_size.y)); }
+
+// The highest the rock gets, in cells.
+float cf_top() { return max(i_volume_size.z * m_height / 100.0, 3.0); }
+
+// The ground height of a world column, in cells: flat levels with steep steps.
+float cf_ground(vec2 xy) {
+  vec2 sd = vec2(m_seed * 17.31, m_seed * 7.73);
+  vec2 q = xy / cf_scale() + sd;
+  // A little warp gives the plateaus bays and spurs instead of round blobs.
+  q += 0.35 * vec2(cf_noise2(q * 1.7 + vec2(3.1, 7.7)) - 0.5, cf_noise2(q * 1.7 + vec2(11.3, 1.9)) - 0.5);
+  float n = 0.6 * cf_noise2(q) + 0.28 * cf_noise2(q * 2.1 + vec2(19.1, 7.3)) + 0.12 * cf_noise2(q * 4.3 + vec2(5.0, 2.0));
+  // Solid moves the line between low ground and plateau.
+  float h = clamp((n - mix(0.62, 0.32, m_solid / 100.0)) / 0.3, 0.0, 1.0);
+  float steps = m_ledges + 1.0;
+  float t = h * steps;
+  // A level is flat; the step to the next is short and steep: a cliff.
+  float level = (floor(t) + smoothstep(0.82, 1.0, fract(t))) / steps;
+  if (h >= 1.0) level = 1.0;
+  // The flats are not quite flat: a gentle roll of a cell or so.
+  float roll = (cf_noise2(q * 5.0 + vec2(2.0, 9.0)) - 0.5) * 1.6;
+  return 1.5 + level * (cf_top() - 2.5) + roll;
+}
+
+// The thickness of one rock layer, in cells.
+float cf_layer() { return max(2.0, floor(cf_top() / 9.0)); }
+
+// Is the cell at the world position p (a cell centre) rock?
+bool cf_raw(vec3 p) {
+  if (p.z < 1.0) return true;  // the bed under everything
+  float rough = m_roughness / 100.0;
+  // Each layer of rock is pushed out or back: ledges and overhangs. The push
+  // wanders from layer to layer, so one layer never sticks out far past the
+  // layer under it. A slow 3D noise bends the wall a little more.
+  float layer = floor(p.z / cf_layer() + 0.4 * cf_noise(p * 0.05 + vec3(m_seed)));
+  vec2 push = (vec2(cf_noise2(vec2(layer * 0.6, m_seed + 3.5)), cf_noise2(vec2(m_seed + 9.5, layer * 0.6))) - 0.5) * 3.0;
+  vec3 s = vec3(m_seed * 3.7, m_seed * 11.1, m_seed * 5.9);
+  vec2 bend = vec2(cf_noise(p / 9.0 + s) - 0.5, cf_noise(p / 9.0 + s + 40.0) - 0.5) * 2.0;
+  vec2 at = p.xy + push * rough * 2.6 + bend * rough * 1.4;
+  if (p.z > cf_ground(at)) return false;
+  // Thin upright cracks in the walls.
+  if (rough > 0.0) {
+    float f = abs(cf_noise(vec3(p.xy / 5.0, p.z / 18.0) + s + 70.0) - 0.5);
+    if (f < 0.022 * rough * rough) return false;
+  }
+  return true;
+}
+
+// A rock cell needs three rock cells among its six neighbours. That removes
+// the thin bits the layers and the cracks would leave floating.
+bool cf_solid(vec3 p) {
+  if (p.z > cf_top() + 4.0) return false;  // the sky: cheap to answer
+  bool inside = cf_raw(p);
+  int n = 0;
+  if (cf_raw(p + vec3(1.0, 0.0, 0.0))) n++;
+  if (cf_raw(p - vec3(1.0, 0.0, 0.0))) n++;
+  if (cf_raw(p + vec3(0.0, 1.0, 0.0))) n++;
+  if (cf_raw(p - vec3(0.0, 1.0, 0.0))) n++;
+  if (cf_raw(p + vec3(0.0, 0.0, 1.0))) n++;
+  if (cf_raw(p - vec3(0.0, 0.0, 1.0))) n++;
+  // An empty cell with five rock neighbours is a pinhole: fill it.
+  if (!inside) return n >= 5;
+  if (n < 3) return false;
+  // A cell with air under it needs rock under one of its sides, or it hangs
+  // in the air: the underside of a loose slab goes.
+  if (!cf_raw(p - vec3(0.0, 0.0, 1.0))) {
+    return cf_raw(p + vec3(1.0, 0.0, -1.0)) || cf_raw(p + vec3(-1.0, 0.0, -1.0))
+        || cf_raw(p + vec3(0.0, 1.0, -1.0)) || cf_raw(p + vec3(0.0, -1.0, -1.0));
+  }
+  return true;
+}
+
+float map(vec3 v) {
+  vec3 p = floor(v) + 0.5;
+  p.xy += vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  if (!cf_solid(p)) return voxel(v);
+  // Colours from the selected one on: grass, dark grass, light rock, rock,
+  // banded rock, dark rock, shadow.
+  if (!cf_raw(p + vec3(0.0, 0.0, 1.0))) {
+    // A top. Grass where the top is wide: two cells away the ground is at most
+    // one cell lower or higher. Light rock on a narrow ledge or an edge.
+    int flat_n = 0;
+    if (cf_raw(p + vec3(2.0, 0.0, -1.0)) && !cf_raw(p + vec3(2.0, 0.0, 2.0))) flat_n++;
+    if (cf_raw(p + vec3(-2.0, 0.0, -1.0)) && !cf_raw(p + vec3(-2.0, 0.0, 2.0))) flat_n++;
+    if (cf_raw(p + vec3(0.0, 2.0, -1.0)) && !cf_raw(p + vec3(0.0, 2.0, 2.0))) flat_n++;
+    if (cf_raw(p + vec3(0.0, -2.0, -1.0)) && !cf_raw(p + vec3(0.0, -2.0, 2.0))) flat_n++;
+    if (flat_n >= 4) return cf_noise2(p.xy / 5.0 + vec2(m_seed)) > 0.62 ? i_color_index + 1.0 : i_color_index;
+    return i_color_index + 2.0;
+  }
+  if (!cf_raw(p - vec3(0.0, 0.0, 1.0))) return i_color_index + 6.0;  // under an overhang
+  // Under the grass: one cell of dark rock, then the bands of the wall.
+  float layer = floor(p.z / cf_layer() + 0.4 * cf_noise(p * 0.05 + vec3(m_seed)));
+  float k = cf_hash(vec2(layer * 1.7, m_seed + 21.0));
+  float grain = cf_hash3(floor(p * vec3(0.5, 0.5, 1.0)) + vec3(m_seed));
+  if (k < 0.3) return grain < 0.06 ? i_color_index + 3.0 : i_color_index + 4.0;
+  if (k < 0.45) return i_color_index + 5.0;
+  return grain < 0.06 ? i_color_index + 2.0 : i_color_index + 3.0;
+}

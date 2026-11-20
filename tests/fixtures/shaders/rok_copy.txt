@@ -1,0 +1,2 @@
+// Copies the model: every cell becomes what it was.
+float map(vec3 v) { return voxel(v); }

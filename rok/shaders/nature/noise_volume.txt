@@ -1,0 +1,145 @@
+// xs nature/noise_volume [Mode] [Scale] [Amount] [Seed] [Tile X] [Tile Y] [Round]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Mode'    var = 'm_mode'    range = '0 2'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Scale'   var = 'm_scale'   range = '2 64'    value = '8'    step = '1'  precision = '0' }
+// arg : { name = 'Amount'  var = 'm_amount'  range = '0 100'   value = '45'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'    var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile X'  var = 'm_tile_x'  range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'  var = 'm_tile_y'  range = '0 64'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Round'   var = 'm_round'   range = '0 100'   value = '70'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : '3D noise: a lumpy blob, a sponge, or carved caves'
+// rok_flags : 'own_grid'
+// rok_tip Mode : 0 gives a lumpy blob, 1 a sponge with round holes, 2 caves. Modes 0 and 1 add cells in the selected colour and keep the cells already there.
+// rok_tip Mode : Mode 2 only removes cells, so it does nothing on an empty grid. Use it on a model that is already filled.
+// rok_tip Scale : The size of the lumps, holes or tunnels, in cells. Low values give fine grain, high values give a few big shapes.
+// rok_tip Scale : Single loose voxels are removed in Modes 0 and 1. A Scale near or above the grid width shows only a small part of the noise:
+// rok_tip Scale : on a 48 grid, Scale 64 in Mode 0 gave no cells at all.
+// rok_tip Amount : How much of the noise counts, from 0 to 100. Mode 0: a bigger blob (on a 48 grid about 3800 cells at 0 and 32000 at 100).
+// rok_tip Amount : Mode 1: smaller holes and a bigger body. Mode 2: wider tunnels. At 0 Mode 2 removes nothing.
+// rok_tip Seed : Picks another random layout of the same kind, from 0 to 9999.
+// rok_tip Tile X : The number of this tile along x, from 0 to 64. It moves the noise by one grid width per step.
+// rok_tip Tile X : Tiles meet without a seam only when Round is 0 (Modes 0 and 1), because Round fades each tile at its own sides. Mode 2 is not changed by Round.
+// rok_tip Tile Y : The number of this tile along y, from 0 to 64. It moves the noise by one grid width per step.
+// rok_tip Tile Y : Tiles meet without a seam only when Round is 0 (Modes 0 and 1), because Round fades each tile at its own sides. Mode 2 is not changed by Round.
+// rok_tip Round : Modes 0 and 1 only. How strongly the noise fades towards the sides of the grid, from 0 to 100.
+// rok_tip Round : At 0 the noise fills the grid and touches its sides. At 70 and above it makes one round shape in the middle.
+// rok_tip Round : No effect in Mode 2: the caves code does not use it.
+
+// 3D noise in the selected colour, for asteroids, lumps of rock, coral or
+// sponge, and caves.
+//   Mode 0: a lumpy blob. The noise is solid where it is high.
+//   Mode 1: a sponge. A lumpy body full of round holes, like coral or pumice.
+//   Mode 2: caves. Winding tunnels carved through the voxels already there.
+// Amount is how much: a bigger blob, smaller holes, wider caves. Scale is
+// the size of the lumps, holes or tunnels.
+//
+// Round fades the noise out towards the grid's sides, so Mode 0 and Mode 1
+// make one round thing in the middle of the grid, not a box cut off flat at
+// the sides. At 0 the noise fills the grid to its sides, and tiles with the
+// same settings and their tile numbers meet without a seam, as the terrain
+// tiles do. Single loose voxels are left out. Everything else stays.
+
+float nv_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 nv_hash33(vec3 p3) {
+  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yxz + 33.33);
+  return fract((p3.xxy + p3.yxx) * p3.zyx);
+}
+
+float nv_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(nv_hash3(i), nv_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(nv_hash3(i + vec3(0.0, 1.0, 0.0)), nv_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(nv_hash3(i + vec3(0.0, 0.0, 1.0)), nv_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(nv_hash3(i + vec3(0.0, 1.0, 1.0)), nv_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// Two octaves: big lumps with smaller ones on them. Finer ones would only
+// make a busy skin and loose specks at voxel size.
+float nv_fbm(vec3 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  for (int k = 0; k < 2; k++) {
+    sum += amp * nv_noise(p);
+    amp *= 0.5;
+    p = p * 2.03 + vec3(17.1, 9.2, 4.7);
+  }
+  return sum / 0.75;
+}
+
+// F1 of 3D cellular noise: the distance to the nearest of points strewn one
+// to a cell. Small near a point: the holes of the sponge are round there.
+float nv_cells(vec3 p) {
+  vec3 g = floor(p);
+  float f1 = 9.0;
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      for (int k = -1; k <= 1; k++) {
+        vec3 id = g + vec3(float(i), float(j), float(k));
+        float d = length(id + nv_hash33(id) - p);
+        f1 = min(f1, d);
+      }
+    }
+  }
+  return f1;
+}
+
+// How far the cell at q (its own place in the grid, before the tile shift)
+// is from the grid's middle: 0 in the middle, 1 at the middle of a side.
+float nv_r(vec3 q) {
+  vec3 h = i_volume_size * 0.5;
+  return length((q - h) / max(h - 0.5, vec3(1.0)));
+}
+
+// Is the cell solid (Mode 0 and 1)? s is the place in noise space, r the
+// distance from the grid's middle. With Round, the noise is raised in the
+// middle and lowered towards the sides, so the shape closes before them.
+bool nv_solid(vec3 s, float r) {
+  float amount = m_amount / 100.0;
+  float e = m_round / 100.0;
+  float lift = e * (0.35 - 0.9 * r * r);
+  if (m_mode < 0.5) return nv_fbm(s) + lift > 0.5 + (0.5 - amount) * 0.4;
+  // The sponge: a big lumpy body (twice the scale) with a round hole
+  // round every point.
+  if (nv_fbm(s * 0.5 + vec3(5.3)) + lift < 0.45) return false;
+  return nv_cells(s) > 0.75 - amount * 0.5;
+}
+
+float map(vec3 v) {
+  vec3 q = floor(v) + 0.5;
+  vec3 p = q;
+  p.xy += vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  vec3 seed = vec3(m_seed * 7.13, m_seed * 3.71, m_seed * 5.29);
+  vec3 s = p / m_scale + seed;
+  if (m_mode < 1.5) {
+    if (!nv_solid(s, nv_r(q))) return voxel(v);
+    // A cell with no solid neighbour on any side would float alone.
+    for (int n = 0; n < 6; n++) {
+      vec3 d = vec3(0.0);
+      if (n == 0) d.x = 1.0;
+      if (n == 1) d.x = -1.0;
+      if (n == 2) d.y = 1.0;
+      if (n == 3) d.y = -1.0;
+      if (n == 4) d.z = 1.0;
+      if (n == 5) d.z = -1.0;
+      if (nv_solid(s + d / m_scale, nv_r(q + d))) return i_color_index;
+    }
+    return voxel(v);
+  }
+  float a = nv_fbm(s) - 0.5;
+  float b = nv_fbm(s + vec3(31.4, 47.2, 11.9)) - 0.5;
+  float w = (m_amount / 100.0) * 0.12;
+  if (abs(a) < w && abs(b) < w) return 0.0;
+  return voxel(v);
+}

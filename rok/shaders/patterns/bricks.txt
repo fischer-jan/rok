@@ -1,0 +1,63 @@
+// xs patterns/bricks [Length] [Height] [Mortar] [Variation] [Direction] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Length'     var = 'm_length'  range = '2 16'    value = '5'    step = '1'  precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'  range = '1 8'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Mortar'     var = 'm_mortar'  range = '0 1'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Variation'  var = 'm_vary'    range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Direction'  var = 'm_dir'     range = '0 1'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Paints a brick wall onto the model'
+// rok_colours : { start = '0'  rgb = 'A5523A B86446 8A4130 CBC3B4' }
+// Rok puts these colours in the palette from the selected colour on: three
+// brick shades and the mortar.
+// rok_tip Length : Brick length in cells, along the course. With Mortar 1 each brick also takes one cell for the joint. Low values give short bricks, 16 gives long ones.
+// rok_tip Height : Brick height in cells, across the course. With Mortar 1 each course also takes one cell for the joint. 1 gives thin courses, 8 gives tall ones.
+// rok_tip Mortar : 1 draws a joint one cell wide between the bricks, in the fourth colour. 0 leaves the joints out, so the bricks touch.
+// rok_tip Variation : Percent of bricks that get a lighter or darker shade. 0 gives one colour for all bricks. 100 gives every brick a shade.
+// rok_tip Direction : 0 lays the bricks flat. 1 swaps the two directions, so the bricks stand up on a wall and run along y on a floor.
+// rok_tip Seed : Picks another random layout of the shades. It has no effect when Variation is 0.
+
+// Paints a brick wall onto the voxels that are there, in a running bond:
+// each course is shifted by half a brick. Direction 0 lays the bricks flat,
+// 1 stands them up. Mortar 0 leaves out the lines between bricks. Variation
+// is how many bricks get a lighter or darker shade.
+//
+// Each voxel gets the bricks of the face it shows. A voxel with an open
+// side is on a wall: the courses run along x + y, so they go around corners
+// without a break. A voxel open only above or below is on a floor or a
+// ceiling: the bricks lie in x and y there, as a paved floor.
+
+float br_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float map(vec3 v) {
+  if (voxel(v) == 0.0) return 0.0;
+  vec3 c = floor(v);
+  bool side = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0
+    || voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+  bool capped = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+  // (u, w): u runs along a course, w across the courses.
+  vec2 uw = vec2(c.x + c.y, c.z);
+  float face = 0.0;
+  if (capped && !side) {
+    uw = c.xy;
+    face = 1.0;
+  }
+  if (m_dir > 0.5) uw = uw.yx;
+  float gap = m_mortar > 0.5 ? 1.0 : 0.0;
+  float mortar = i_color_index + 3.0;
+  float course = floor(uw.y / (m_height + gap));
+  if (gap > 0.0 && mod(uw.y, m_height + gap) >= m_height) return mortar;
+  float shift = mod(course, 2.0) * floor((m_length + gap) * 0.5);
+  float brick = floor((uw.x + shift) / (m_length + gap));
+  if (gap > 0.0 && mod(uw.x + shift, m_length + gap) >= m_length) return mortar;
+  vec3 id = vec3(brick, course, m_seed + face * 101.0);
+  if (br_hash3(id) * 100.0 >= m_vary) return i_color_index;
+  return i_color_index + (br_hash3(id + 3.7) > 0.5 ? 1.0 : 2.0);
+}

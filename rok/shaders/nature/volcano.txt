@@ -1,0 +1,196 @@
+// xs nature/volcano [Height] [Width] [Crater] [Lava] [Ridges] [Grass] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Height'  var = 'm_height'  range = '10 100'  value = '85'  step = '1'  precision = '0' }
+// arg : { name = 'Width'   var = 'm_width'   range = '20 100'  value = '90'  step = '1'  precision = '0' }
+// arg : { name = 'Crater'  var = 'm_crater'  range = '0 100'   value = '45'  step = '1'  precision = '0' }
+// arg : { name = 'Lava'    var = 'm_lava'    range = '0 100'   value = '60'  step = '1'  precision = '0' }
+// arg : { name = 'Ridges'  var = 'm_ridges'  range = '0 100'   value = '55'  step = '1'  precision = '0' }
+// arg : { name = 'Grass'   var = 'm_grass'   range = '0 100'   value = '40'  step = '1'  precision = '0' }
+// arg : { name = 'Seed'    var = 'm_seed'    range = '0 9999'  value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A volcano with a crater lake of lava and lava flows'
+// rok_flags : 'own_grid'
+// rok_colours : { start = '0'  rgb = 'FFE04A FF8A1E D2381A 6E2418 34302F 5A534D 8A837B 6B4A35 5E8C3A' }
+// rok_tip Height : How tall the cone is, in percent of the tallest cone allowed. The tallest cone is about 1.15 times the radius of its foot,
+// rok_tip Height : or the grid height minus 2 if that is less. On a tall grid more grid height adds nothing. 10 gives a low mound.
+// rok_tip Width : The radius of the foot of the cone, in percent of 46 percent of the smaller of grid width and depth. 100 nearly fills the grid.
+// rok_tip Width : The radius is never less than 4 cells. It also sets the height limit of the cone.
+// rok_tip Crater : The width of the crater at the top, from 0 to 100. At 0 there is no crater and no lava lake: the top is a point.
+// rok_tip Crater : At 100 the crater has a radius of about 28 percent of the foot.
+// rok_tip Lava : How much lava there is. At 0 there is none, and the crater is a dark pit. From 1 to 33 there is one flow, from 34 to 67 two, from 68 to 100 three.
+// rok_tip Lava : Higher values also give wider and longer flows. The lava lake in the crater fills at any value above 0.
+// rok_tip Lava : The shader keeps cells already there, so a model that already fills the cone hides the lava.
+// rok_tip Ridges : How deep the gullies cut into the sides of the cone, from 0 to 100. At 0 the cone is smooth.
+// rok_tip Ridges : At 100 the gullies lower the slope by up to 28 percent of the height.
+// rok_tip Grass : How far the green comes up the foot of the cone, from 0 to 100. At 0 there is no grass and the foot is scorched earth.
+// rok_tip Grass : Higher values bring the grass closer to the top. It needs empty cells at the foot: with an 8 cell thick slab of ground on a 64 grid,
+// rok_tip Grass : 100 changed only 5 cells.
+// rok_tip Seed : Picks another random layout of the same kind, from 0 to 9999. It moves the centre a little and changes the gullies and the flow directions.
+// Rok puts these colours in the palette from the selected colour on: hot
+// lava, lava, cooling lava, crust, dark rock, rock, ash, scorched earth and
+// grass.
+
+// One volcano in the middle of the grid. The voxels already there stay.
+//
+// The cone is steep near the top and spreads out at the foot. Ridges cuts
+// gullies into its sides, running from the top down. At the top a crater
+// opens; Crater is its width. Lava fills the crater to a little below the
+// rim. Lava sets the amount of lava: at 0 there is none and the crater is a
+// dark pit; higher values give more and wider flows down the sides. A flow
+// is hot yellow in the middle, orange and red at its edges, with dark
+// crust here and there. Grass is how far the green comes up the foot of the
+// mountain. Ash lies near the top, bare rock on the middle slopes.
+
+float vo_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float vo_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(vo_hash(i), vo_hash(i + vec2(1.0, 0.0)), u.x),
+             mix(vo_hash(i + vec2(0.0, 1.0)), vo_hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+// The centre of the volcano: the middle of the grid, moved a little by the seed.
+vec2 vo_centre() {
+  vec2 jitter = vec2(vo_hash(vec2(m_seed, 1.0)), vo_hash(vec2(2.0, m_seed))) - 0.5;
+  return i_volume_size.xy * 0.5 + jitter * min(i_volume_size.x, i_volume_size.y) * 0.06;
+}
+
+// The radius of the foot of the cone, in cells.
+float vo_radius() { return max(4.0, 0.46 * min(i_volume_size.x, i_volume_size.y) * m_width / 100.0); }
+
+// The height of the top of the cone, in cells: never steeper than a real
+// volcano, so a tall grid does not give a needle.
+float vo_peak() { return max(3.0, min(i_volume_size.z - 2.0, 1.15 * vo_radius()) * m_height / 100.0); }
+
+// The radius of the crater, as a share of the foot's radius.
+float vo_crater() { return 0.06 + 0.22 * m_crater / 100.0; }
+
+// The level of the lava in the crater, in cells.
+float vo_lake() {
+  float rc = vo_crater();
+  float rim = vo_peak() * pow(1.0 - rc, 1.5);
+  return rim - max(1.5, vo_peak() * 0.08);
+}
+
+// How deep in a gully the column xy lies, 0 to 1. Gullies are a noise
+// around the cone, stretched along the slope, so they make grooves that run
+// from the top down. It reads the direction, not the angle, so there is no
+// seam where the angle jumps.
+float vo_gully(vec2 xy) {
+  vec2 d = xy - vo_centre();
+  float r = length(d) / vo_radius();
+  vec2 dir = d / max(length(d), 0.001);
+  float n = vo_noise(dir * 3.2 + vec2(m_seed * 1.7, r * 1.1)) * 0.65 + vo_noise(dir * 7.0 + vec2(r * 2.0, m_seed)) * 0.35;
+  return abs(2.0 * n - 1.0);
+}
+
+// The ground height at the column xy, in cells.
+float vo_ground(vec2 xy) {
+  vec2 d = xy - vo_centre();
+  float R = vo_radius();
+  float r = length(d) / R;
+  float peak = vo_peak();
+  float gully = vo_gully(xy);
+  float rough = m_ridges / 100.0;
+  // The cone: steep near the top, spreading out at the foot, a low apron outside.
+  float cone = r < 1.0 ? pow(1.0 - r, 1.5) : 0.0;
+  float apron = 0.06 * exp(-max(r - 0.8, 0.0) * 3.0);
+  float h = peak * (max(cone, apron) * (1.0 - rough * 0.28 * gully * smoothstep(0.05, 0.4, r)));
+  // The crater: a bowl inside the rim, its floor well below the rim.
+  float rc = vo_crater();
+  if (m_crater > 0.5) {
+    float rim = peak * pow(1.0 - rc, 1.5);
+    float lip = rim + peak * 0.03 * exp(-pow((r - rc) / (rc * 0.35 + 0.02), 2.0));
+    if (r < rc) {
+      float floorH = rim - max(3.0, peak * 0.22);
+      h = mix(floorH, rim, pow(r / rc, 3.0));
+    } else {
+      h = max(h, lip * smoothstep(rc + 0.25, rc, r));
+    }
+  }
+  // The land around: low and a little uneven.
+  float land = 2.0 + (vo_noise(xy / 9.0 + vec2(m_seed)) - 0.5) * 1.6;
+  return max(h, land);
+}
+
+// How much the column xy lies on a lava flow (above 0: on it; 1 in the middle).
+float vo_flow(vec2 xy) {
+  if (m_lava < 0.5) return 0.0;
+  vec2 d = xy - vo_centre();
+  float R = vo_radius();
+  float r = length(d) / R;
+  float rc = vo_crater();
+  if (r < rc * 0.9) return 0.0;
+  vec2 dir = d / max(length(d), 0.001);
+  float flows = 1.0 + floor(m_lava / 34.0);  // 1 to 3 flows
+  float best = 0.0;
+  for (int k = 0; k < 3; k++) {
+    if (float(k) >= flows) break;
+    float a = vo_hash(vec2(float(k) * 3.1 + 1.0, m_seed)) * 6.2832 + float(k) * 2.1;
+    // A flow meanders as it runs down.
+    a += (vo_noise(vec2(r * 4.0, float(k) * 5.0 + m_seed)) - 0.5) * 0.9 * r;
+    vec2 fd = vec2(cos(a), sin(a));
+    if (dot(dir, fd) < 0.0) continue;
+    float side = abs(dir.x * fd.y - dir.y * fd.x) * length(d);  // cells from the flow's middle line
+    float reach = 0.55 + 0.5 * vo_hash(vec2(m_seed, float(k) * 7.0)) * m_lava / 100.0;
+    // Wide at the top, thinning out toward its end.
+    float width = (0.8 + 2.2 * m_lava / 100.0) * (1.0 - 0.6 * smoothstep(rc, reach, r)) * max(R / 30.0, 0.6);
+    float along = 1.0 - smoothstep(reach - 0.08, reach, r);
+    best = max(best, (1.0 - side / max(width, 0.5)) * along);
+  }
+  return best;
+}
+
+float map(vec3 v) {
+  if (voxel(v) > 0.0) return voxel(v);
+  vec2 xy = floor(v.xy) + 0.5;
+  float z = floor(v.z);
+  float ground = floor(vo_ground(xy));
+  float gully = vo_gully(xy);
+  vec2 d = xy - vo_centre();
+  float r = length(d) / vo_radius();
+  float lake = floor(vo_lake());
+  bool in_crater = m_crater > 0.5 && r < vo_crater();
+  // Colours from the selected one on: hot lava, lava, cooling lava, crust,
+  // dark rock, rock, ash, scorched earth, grass.
+  if (z >= ground) {
+    // The crater fills with lava up to the lake's level.
+    if (in_crater && m_lava > 0.5 && z < lake) {
+      float swirl = vo_noise(xy / 2.5 + vec2(m_seed));
+      return swirl > 0.72 ? i_color_index + 3.0 : (swirl > 0.35 ? i_color_index + 1.0 : i_color_index);
+    }
+    return 0.0;
+  }
+  float depth = ground - z;
+  if (depth > 3.0) return i_color_index + 4.0;  // dark rock inside
+  float grain = vo_hash(xy * 1.3 + vec2(m_seed, z));
+  // A lava flow on the surface: hot in its middle, cooler at its edges.
+  float flow = vo_flow(xy);
+  if (flow > 0.0 && depth <= 1.0 && !in_crater) {
+    float crust = vo_noise(xy / 2.0 + vec2(m_seed * 1.3, 7.0));
+    if (crust > 0.78) return i_color_index + 3.0;
+    if (flow > 0.6) return i_color_index;
+    if (flow > 0.3) return i_color_index + 1.0;
+    return i_color_index + 2.0;
+  }
+  // The crater floor: crust under the lava, a dark pit without it.
+  if (in_crater) return depth <= 1.0 && m_lava > 0.5 ? i_color_index + 3.0 : i_color_index + 4.0;
+  if (depth > 1.0) return i_color_index + 4.0;
+  // The surface: ash near the top, rock on the slopes, dark in the gullies,
+  // scorched earth and grass at the foot.
+  float noise = vo_noise(xy / 5.0 + vec2(3.0, m_seed));
+  float grass_line = 0.55 + 0.6 * (1.0 - m_grass / 100.0);
+  if (m_grass > 0.5 && r + (noise - 0.5) * 0.25 > grass_line) return noise < 0.22 ? i_color_index + 7.0 : i_color_index + 8.0;
+  if (r > 0.82 + (noise - 0.5) * 0.2) return i_color_index + 7.0;
+  if (gully > 0.62 && r > 0.15) return i_color_index + 4.0;
+  if (r < 0.42 + (noise - 0.5) * 0.18) return grain > 0.8 ? i_color_index + 5.0 : i_color_index + 6.0;
+  return grain > 0.82 ? i_color_index + 6.0 : i_color_index + 5.0;
+}

@@ -1,0 +1,135 @@
+// xs patterns/grime [Dirt] [Wear] [Radius] [Noise] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Dirt'    var = 'm_dirt'    range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Wear'    var = 'm_wear'    range = '0 100'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Radius'  var = 'm_radius'  range = '1 3'     value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Noise'   var = 'm_noise'   range = '0 100'   value = '40'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'    var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Dark grime in crevices and corners, worn light edges'
+// rok_tip Dirt : How far the dark shade spreads, in percent. 0 gives no dark. 100 darkens even flat faces near a corner. A colour that has no darker shade in the palette stays as it is.
+// rok_tip Wear : How many outer edges and corners get a light shade, in percent. 0 gives no light edges. The flat middle of a face is never made light. A colour that has no lighter shade in the palette stays as it is.
+// rok_tip Radius : How many cells each voxel looks around, from 1 to 3. 1 marks only tight corners. 3 gives a soft dark some cells away from a corner.
+// rok_tip Noise : How much the dark and light shades break up, in percent. 0 gives even shades. 100 gives a patchy result. At 0 Seed has no effect.
+// rok_tip Seed : Picks another random layout of the noise. It has no effect when Noise is 0.
+
+// Bakes light and dirt into the colours, as a game artist paints them by
+// hand. Voxels in crevices and inner corners, where light and dust do not
+// reach, get a darker shade of their own colour: the foot of a wall, the
+// gap between two parts, the inside of a window. Outer edges and corners,
+// where hands and weather rub the paint off, get a lighter shade.
+//
+// Dirt is how far the dark spreads (0 none, 100 even onto flat faces near
+// a corner), Wear how many edges get light (0 none). Radius is how far each
+// voxel looks around: 1 marks only tight corners, 3 spreads a soft dark
+// some cells out. Noise breaks both up, so they are not even all along.
+//
+// How hidden a voxel is: for each face it shows, the share of filled cells
+// in the open space in front of that face, Radius layers deep. Only that
+// side counts, so a thin floor plate is as dark at the foot of a wall as a
+// thick one. The shades are the nearest colours the palette has; a voxel
+// whose colour has no darker or lighter shade stays as it is. It only
+// recolours voxels on the surface.
+
+float gm_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float gm_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(gm_hash3(i), gm_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(gm_hash3(i + vec3(0.0, 1.0, 0.0)), gm_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(gm_hash3(i + vec3(0.0, 0.0, 1.0)), gm_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(gm_hash3(i + vec3(0.0, 1.0, 1.0)), gm_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// A shade of the colour in slot here: darker when f < 1 (the colour times
+// f), lighter when f > 1 (that far towards white). It is the palette colour
+// nearest to the wanted one among those that really are darker (or
+// lighter); hue counts twice as much as brightness, so a shade keeps its
+// hue. Here itself when the palette has none.
+float gm_shade(float here, float f) {
+  vec3 c = palette(here).rgb;
+  vec3 w = vec3(0.299, 0.587, 0.114);
+  float lc = dot(c, w);
+  bool up = f > 1.0;
+  vec3 want = up ? mix(c, vec3(1.0), f - 1.0) : c * f;
+  float best = here;
+  float best_d = 1e9;
+  for (int i = 1; i < 256; i++) {
+    vec3 q = palette(float(i)).rgb;
+    float dl = dot(q, w) - lc;
+    if (up ? dl < 0.04 : dl > -0.04) continue;
+    vec3 d = q - want;
+    float l = dot(d, w);
+    vec3 hue = d - l;
+    float dist = l * l + 2.0 * dot(hue, hue);
+    if (dist < best_d) { best_d = dist; best = float(i); }
+  }
+  return best;
+}
+
+// How much of the open space in front of a face is filled: the cells in
+// the r layers out from the face along n, each 2 r + 1 cells wide along t1
+// and t2. 0 on a flat face in the open, about 0.4 at the foot of a wall,
+// 0.6 in an inner corner. Nearer layers count more.
+float gm_cover(vec3 v, vec3 n, vec3 t1, vec3 t2, float r) {
+  float filled = 0.0;
+  float total = 0.0;
+  for (int a = 1; a <= 3; a++) {
+    if (float(a) > r) break;
+    float weight = 1.0 / float(a);
+    for (int b = -3; b <= 3; b++) {
+      if (abs(float(b)) > r) continue;
+      for (int c = -3; c <= 3; c++) {
+        if (abs(float(c)) > r) continue;
+        total += weight;
+        if (voxel(v + n * float(a) + t1 * float(b) + t2 * float(c)) > 0.0) filled += weight;
+      }
+    }
+  }
+  return filled / total;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here == 0.0) return 0.0;
+  float r = clamp(floor(m_radius + 0.5), 1.0, 3.0);
+  vec3 X = vec3(1.0, 0.0, 0.0);
+  vec3 Y = vec3(0.0, 1.0, 0.0);
+  vec3 Z = vec3(0.0, 0.0, 1.0);
+  // The most hidden of the faces the voxel shows.
+  float cover = 0.0;
+  bool ox = false;
+  bool oy = false;
+  bool oz = false;
+  if (voxel(v + X) == 0.0) { ox = true; cover = max(cover, gm_cover(v, X, Y, Z, r)); }
+  if (voxel(v - X) == 0.0) { ox = true; cover = max(cover, gm_cover(v, -X, Y, Z, r)); }
+  if (voxel(v + Y) == 0.0) { oy = true; cover = max(cover, gm_cover(v, Y, X, Z, r)); }
+  if (voxel(v - Y) == 0.0) { oy = true; cover = max(cover, gm_cover(v, -Y, X, Z, r)); }
+  if (voxel(v + Z) == 0.0) { oz = true; cover = max(cover, gm_cover(v, Z, X, Y, r)); }
+  if (voxel(v - Z) == 0.0) { oz = true; cover = max(cover, gm_cover(v, -Z, X, Y, r)); }
+  float axes = (ox ? 1.0 : 0.0) + (oy ? 1.0 : 0.0) + (oz ? 1.0 : 0.0);
+  if (axes == 0.0) return here;  // inside the model
+  vec3 p = floor(v) + 0.5 + m_seed * 1.7;
+  float n = (gm_noise(p / 3.0) * 0.7 + gm_hash3(p) * 0.3 - 0.5) * m_noise / 100.0;
+  // Dark: about 1 at the foot of a wall, 0.5 a cell further out, 1.5 in an
+  // inner corner.
+  float dark = cover / 0.4 + n * 1.5;
+  float edge = 1.0 - m_dirt / 100.0 * 0.95;
+  if (m_dirt > 0.0 && dark > edge + 0.6) return gm_shade(here, 0.6);
+  if (m_dirt > 0.0 && dark > edge) return gm_shade(here, 0.8);
+  // Light: only on an outer edge (open on two axes) or corner (three). The
+  // middle of a thin plate is open on one axis only, so it stays as it is.
+  if (axes < 2.0) return here;
+  float worn = (axes - 1.0) * 0.7 + n * 1.5;
+  if (m_wear > 0.0 && worn > 1.35 - m_wear / 100.0 * 0.9) return gm_shade(here, 1.25);
+  return here;
+}

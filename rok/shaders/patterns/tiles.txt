@@ -1,0 +1,105 @@
+// xs patterns/tiles [Layout] [Size] [Grout] [Variation] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Layout'     var = 'm_layout'  range = '0 2'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Size'       var = 'm_size'    range = '2 32'    value = '5'    step = '1'  precision = '0' }
+// arg : { name = 'Grout'      var = 'm_grout'   range = '0 1'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Variation'  var = 'm_vary'    range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Paints square, hexagon or uneven tiles'
+// rok_colours : { start = '0'  rgb = 'B8B0A0 A39B8B CFC8BA 5E5850' }
+// Rok puts these colours in the palette from the selected colour on: three
+// tile shades and the grout.
+// rok_tip Layout : 0 gives square tiles. 1 gives hexagons. 2 gives uneven slabs of random size.
+// rok_tip Size : Tile size in cells. With Layout 1, sizes below 5 leave mostly grout, and at 2 the grout fills everything. With Layout 2, Size is the size of the smallest slabs, and the block they are cut from is four times as large.
+// rok_tip Grout : 1 draws grout lines between the tiles, in the fourth colour. 0 leaves them out, so the tiles touch.
+// rok_tip Variation : Percent of tiles that get another shade. 0 gives one shade for all tiles. 100 gives every tile a shade.
+// rok_tip Seed : Picks another random layout of the shades, and in Layout 2 also of the slab cuts. With Layout 0 or 1 and Variation 0 it has no effect.
+
+// Paints tiles onto the voxels that are there. Layout 0 is a square grid,
+// 1 hexagons, 2 uneven slabs of random sizes. Size is how big a tile is.
+// Grout 0 leaves out the lines between tiles. Variation is how many tiles
+// get another shade.
+//
+// Each voxel is tiled in the plane of the face it shows. A voxel with an
+// open side is on a wall: it uses the plane (x + y, z), so the tiles run
+// around corners without a break. A voxel open only above or below is on a
+// floor or a ceiling: it uses the plane (x, y). So a face never falls on a
+// grout line as a whole.
+
+float ti_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// The shade of a tile: 0 the main colour, 1 or 2 another.
+float ti_shade(vec3 id) {
+  if (ti_hash3(id + m_seed) * 100.0 >= m_vary) return 0.0;
+  return ti_hash3(id + m_seed + 5.1) > 0.5 ? 1.0 : 2.0;
+}
+
+// The face plane of the voxel at v, as (u, w, kind): kind 0 for a wall,
+// 1 for a floor or a ceiling.
+vec3 ti_plane(vec3 v) {
+  vec3 c = floor(v);
+  bool side = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0
+    || voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+  bool capped = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+  if (capped && !side) return vec3(c.x, c.y, 1.0);
+  return vec3(c.x + c.y, c.z, 0.0);
+}
+
+float map(vec3 v) {
+  if (voxel(v) == 0.0) return 0.0;
+  vec3 f = ti_plane(v);
+  vec2 c = f.xy;
+  float grout = i_color_index + 3.0;
+  bool lines = m_grout > 0.5;
+  if (m_layout < 0.5) {
+    // Square tiles in a grid.
+    vec2 cell = floor(c / m_size);
+    vec2 in_cell = c - cell * m_size;
+    if (lines && (in_cell.x == 0.0 || in_cell.y == 0.0)) return grout;
+    return i_color_index + ti_shade(vec3(cell, f.z));
+  }
+  if (m_layout < 1.5) {
+    // Hexagons: the nearer of two offset grids of centres. On walls the
+    // rows run along the wall.
+    vec2 p = (c + 0.5) / m_size;
+    vec2 s = vec2(1.0, 1.7320508);
+    vec2 a = mod(p, s) - s * 0.5;
+    vec2 b = mod(p - s * 0.5, s) - s * 0.5;
+    vec2 local = dot(a, a) < dot(b, b) ? a : b;
+    vec2 centre = p - local;
+    vec2 q = abs(local);
+    float edge = max(dot(q, normalize(vec2(1.0, 1.7320508))), q.x);
+    if (lines && edge > 0.5 - 0.9 / m_size) return grout;
+    return i_color_index + ti_shade(vec3(floor(centre * 2.0 + 0.5), f.z));
+  }
+  // Uneven slabs: a block of four by four tiles, split again and again at
+  // random, across its longer side.
+  float big = m_size * 4.0;
+  vec2 lo = floor(c / big) * big;
+  vec2 hi = lo + big;
+  for (int level = 0; level < 6; level++) {
+    vec2 extent = hi - lo;
+    if (max(extent.x, extent.y) < m_size * 1.5) break;
+    vec3 id = vec3(lo + hi * 0.37, float(level) + f.z * 11.0);
+    float t = 0.3 + 0.4 * ti_hash3(id + m_seed * 0.1);
+    if (extent.x >= extent.y) {
+      float s = floor(lo.x + extent.x * t);
+      if (lines && c.x == s) return grout;
+      if (c.x < s) hi.x = s; else lo.x = s + 1.0;
+    } else {
+      float s = floor(lo.y + extent.y * t);
+      if (lines && c.y == s) return grout;
+      if (c.y < s) hi.y = s; else lo.y = s + 1.0;
+    }
+  }
+  // The block's own border is grout too.
+  if (lines && (c.x == floor(c.x / big) * big || c.y == floor(c.y / big) * big)) return grout;
+  return i_color_index + ti_shade(vec3(lo, f.z));
+}

@@ -1,0 +1,140 @@
+// xs water/stream [Width] [Depth] [Bends] [Bend Size] [Across] [Offset] [Stones] [Ripples] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Width'      var = 'm_width'   range = '2 40'    value = '10'  step = '1'  precision = '0' }
+// arg : { name = 'Depth'      var = 'm_depth'   range = '2 16'    value = '4'   step = '1'  precision = '0' }
+// arg : { name = 'Bends'      var = 'm_bends'   range = '0 100'   value = '45'  step = '1'  precision = '0' }
+// arg : { name = 'Bend Size'  var = 'm_bsize'   range = '8 120'   value = '36'  step = '1'  precision = '0' }
+// arg : { name = 'Across'     var = 'm_across'  range = '0 1'     value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Offset'     var = 'm_offset'  range = '-50 50'  value = '0'   step = '1'  precision = '0' }
+// arg : { name = 'Stones'     var = 'm_stones'  range = '0 100'   value = '45'  step = '1'  precision = '0' }
+// arg : { name = 'Ripples'    var = 'm_ripples' range = '0 100'   value = '35'  step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'    range = '0 9999'  value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A clear stream of glass water cut into the ground'
+// rok_colours : { start = '0'  rgb = 'B8E6F6 92D2F0 6BB4E4 4A93D2 EAF7FC E8E5DC B6B2A8 9C968A BCAE8E 76706A'  names = 'Surface, Shallow water, Water, Deep water, Ripple, Bank stone, Stone shade, Pebble, Bed sand, Dark pebble'  glass = '0.9 0.88 0.82 0.75 0.6' }
+// Rok puts these colours in the palette; the five water colours are glass,
+// so the bed shows through them in the rendered view.
+// rok_tip Width : The width of the channel in cells. The banks beside it, up to 2.5 cells out, can get stones. Needs ground at least 2 cells high, filled from the grid floor up; on an empty grid it changes nothing.
+// rok_tip Depth : How many cells deep the stream cuts at its middle. It is shallower toward the banks and never less than 2 cells. The ground must be deeper than the cut, or the bed lies on the grid floor. Deeper water also gets darker colours.
+// rok_tip Bends : How far the stream winds from side to side, in percent of the grid width. 0 gives a straight stream. 100 swings it up to about a third of the grid width to each side.
+// rok_tip Bend Size : How long one bend is along the flow, in cells. Small values give tight curves, large values long sweeps. No effect when Bends is 0.
+// rok_tip Across : 0 lets the stream run along y (front to back). 1 lets it run along x (left to right).
+// rok_tip Offset : Moves the stream to one side, in percent of the grid width: -50 puts its middle at one edge, 50 at the other, 0 in the middle.
+// rok_tip Stones : How many pale stones lie on the banks, in percent. Some stand one cell high. 0 gives none. Needs ground beside the channel.
+// rok_tip Ripples : How many light streaks lie on the water surface along the flow, in percent. 0 gives none. It changes only colours.
+// rok_tip Seed : Picks another random layout of the bends, the uneven bed and the colour patches. With Bends at 0 the stream stays straight and only the bed and the colours change.
+
+// Cuts a winding channel into the ground and fills it with clear water. The
+// stream runs along y (Across 0) or along x (Across 1), through the middle of
+// the grid; Offset moves it to one side, in percent of the grid. Width is the
+// channel's width in cells, Depth how far it cuts into the ground at its
+// middle; it is shallower toward the banks, as a real stream bed is. Bends is
+// how far it winds, Bend Size how long one bend is.
+//
+// The water's surface lies one cell below the top of the ground beside it.
+// The bed under the water is pebbles and sand; Stones puts pale stones on the
+// banks, some of them standing a cell high. Ripples marks light streaks on
+// the surface, along the flow. The ground is found from the grid's floor up,
+// so cut the stream before trees grow over it.
+
+float st_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float st_noise(vec2 p) {
+  vec3 q = vec3(p, m_seed * 1.37);
+  vec3 i = floor(q);
+  vec3 f = q - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(st_hash3(i), st_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(st_hash3(i + vec3(0.0, 1.0, 0.0)), st_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  return mix(a, b, u.y);
+}
+
+// The middle of the stream, across the flow, at a place along it.
+float st_middle(float along, float span) {
+  float base = span * (0.5 + m_offset / 100.0);
+  float amp = span * 0.28 * m_bends / 100.0;
+  float phase = 6.2831853 * along / m_bsize + m_seed * 0.71;
+  float wander = st_noise(vec2(along / (m_bsize * 0.6), 3.1)) - 0.5;
+  return base + amp * (0.75 * sin(phase) + 0.9 * wander);
+}
+
+// The top of the ground in a column: the last filled cell up from the floor;
+// -1 when the column is empty at the floor.
+float st_ground(vec2 xy) {
+  float top = -1.0;
+  for (int k = 0; k < 256; k++) {
+    float z = float(k);
+    if (z >= i_volume_size.z) break;
+    if (voxel(vec3(xy, z + 0.5)) <= 0.0) break;
+    top = z;
+  }
+  return top;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  vec2 xy = floor(v.xy) + 0.5;
+  float along = m_across > 0.5 ? xy.x : xy.y;
+  float across = m_across > 0.5 ? xy.y : xy.x;
+  float span = m_across > 0.5 ? i_volume_size.y : i_volume_size.x;
+  float half_w = m_width * 0.5;
+  float d = abs(across - st_middle(along, span));
+  if (d > half_w + 2.5) return here;
+
+  float top = st_ground(xy);
+  if (top < 1.0) return here;
+  float z = floor(v.z);
+  float cell = st_hash3(vec3(xy, 11.0));
+
+  if (d > half_w) {
+    // The banks: pale stones in the top layer, some a cell high.
+    float chance = m_stones / 100.0 * (1.0 - (d - half_w) / 2.5);
+    if (z == top && here > 0.0 && cell < chance) {
+      return st_hash3(vec3(xy, 5.0)) < 0.6 ? i_color_index + 5.0 : i_color_index + 6.0;
+    }
+    if (z == top + 1.0 && here <= 0.0 && d < half_w + 1.5 && cell < chance * 0.3) {
+      return i_color_index + 5.0;
+    }
+    return here;
+  }
+
+  // In the channel: deepest in the middle, a little uneven.
+  float p = d / max(half_w, 0.5);
+  float uneven = st_noise(xy / 3.0 + 17.0) - 0.5;
+  float cut = max(2.0, floor(m_depth * (1.0 - p * p) + uneven + 0.5));
+  float bed = top - cut;
+  float surface = top - 1.0;
+
+  if (z > top + 2.0) return here;  // canopies and tall things stay
+  if (z > surface) return 0.0;     // the cut, and the grass that stood on it
+  if (z < bed) return here;
+  if (z == bed) {
+    float h = st_hash3(vec3(xy, 23.0));
+    if (h < 0.35) return i_color_index + 8.0;
+    if (h < 0.7) return i_color_index + 7.0;
+    if (h < 0.88) return i_color_index + 9.0;
+    return i_color_index + 6.0;
+  }
+
+  // Water: lighter at the surface and over a shallow bed, darker below.
+  float below = surface - z;
+  float deep = surface - bed;
+  if (below < 0.5) {
+    vec2 flow = m_across > 0.5 ? vec2(xy.x / 6.0, xy.y / 1.6) : vec2(xy.x / 1.6, xy.y / 6.0);
+    float streak = st_noise(flow + 41.0);
+    if (streak > 1.0 - 0.35 * m_ripples / 100.0) return i_color_index + 4.0;
+    // Patches of lighter and darker water, a few cells across.
+    float patch = st_noise(xy / 2.2 + 63.0) + 0.25 * (st_hash3(vec3(xy, 31.0)) - 0.5);
+    if (deep <= 1.5) return patch > 0.6 ? i_color_index : i_color_index + 1.0;
+    return patch > 0.45 ? i_color_index : i_color_index + 1.0;
+  }
+  float t = below / max(m_depth - 1.0, 1.0);
+  if (t < 0.4) return i_color_index + 2.0;
+  return i_color_index + 3.0;
+}

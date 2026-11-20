@@ -1,0 +1,53 @@
+// xs weathering/vines [Length] [Density] [Leaves] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Length'   var = 'm_length'   range = '1 64'    value = '12'   step = '1'  precision = '0' }
+// arg : { name = 'Density'  var = 'm_density'  range = '0 100'   value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Leaves'   var = 'm_leaves'   range = '0 100'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Vines hanging from roofs, ledges and overhangs'
+// rok_colours : { start = '0'  rgb = '3E6B2A 5F9A3A' }
+// Rok puts these colours in the palette from the selected colour on: vine and
+// leaf.
+// rok_tip Length : How far the longest vines hang, in cells. Each vine hangs between 30 percent of Length and Length; at 1 every vine is one cell. Vines hang only under filled cells, such as a roof or ledge, so a model with no empty space under a part of it gets none.
+// rok_tip Density : Percent of the columns under the model that get a vine. 0 grows no vines. 100 gives every column a vine. A column needs a filled cell above it, within the vine length.
+// rok_tip Leaves : Percent of the empty cells beside a vine that get a leaf. 0 gives bare vines. 100 gives a leaf at every free place beside a vine.
+// rok_tip Seed : Picks another random layout of the vines and leaves.
+
+// Vines hang down from the undersides of the model: roofs, ledges,
+// overhangs. Length is how far the longest ones hang, Density how many
+// there are, Leaves how leafy they are. It only adds voxels, in empty cells.
+
+float vi_hash(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// True when a vine hangs through the empty cell v.
+bool vi_vine(vec3 v) {
+  if (voxel(v) > 0.0) return false;
+  vec3 column = vec3(floor(v.xy), m_seed);
+  if (vi_hash(column) * 100.0 >= m_density) return false;
+  // Whole cells, from 30 percent of Length up to Length itself; at least 1.
+  float len = max(1.0, ceil(m_length * (0.3 + 0.7 * vi_hash(column + 4.1))));
+  for (int i = 1; i <= 64; i++) {
+    if (float(i) > len) return false;
+    vec3 up = v + vec3(0.0, 0.0, float(i));
+    if (up.z >= i_volume_size.z) return false;
+    if (voxel(up) > 0.0) return true;
+  }
+  return false;
+}
+
+float map(vec3 v) {
+  if (voxel(v) > 0.0) return voxel(v);
+  if (vi_vine(v)) return i_color_index;
+  // A leaf beside a vine, now and then.
+  if (vi_hash(vec3(floor(v)) + m_seed * 0.37) * 100.0 >= m_leaves) return 0.0;
+  if (vi_vine(v + vec3(1.0, 0.0, 0.0)) || vi_vine(v - vec3(1.0, 0.0, 0.0))
+      || vi_vine(v + vec3(0.0, 1.0, 0.0)) || vi_vine(v - vec3(0.0, 1.0, 0.0))) return i_color_index + 1.0;
+  return 0.0;
+}

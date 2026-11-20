@@ -1,0 +1,200 @@
+[
+ {
+  "fixture": "bird",
+  "voxel": [
+   0,
+   19,
+   12
+  ],
+  "count": 160,
+  "bbox": [
+   [
+    0,
+    19,
+    12
+   ],
+   [
+    4,
+    35,
+    13
+   ]
+  ],
+  "sha1": "cd4f72d95938e3e78cebaeaf9c6e2154b4a9ff8a"
+ },
+ {
+  "fixture": "bird",
+  "voxel": [
+   40,
+   0,
+   9
+  ],
+  "count": 116,
+  "bbox": [
+   [
+    30,
+    0,
+    9
+   ],
+   [
+    49,
+    2,
+    10
+   ]
+  ],
+  "sha1": "868c7dc76af18c76bf71bb0cf29b1ffce0f8907c"
+ },
+ {
+  "fixture": "bird",
+  "voxel": [
+   79,
+   34,
+   13
+  ],
+  "count": 160,
+  "bbox": [
+   [
+    75,
+    19,
+    12
+   ],
+   [
+    79,
+    35,
+    13
+   ]
+  ],
+  "sha1": "11dd6df9514753f5db6259debb85e658ee286221"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   0,
+   8,
+   4
+  ],
+  "count": 160,
+  "bbox": [
+   [
+    0,
+    8,
+    0
+   ],
+   [
+    3,
+    16,
+    8
+   ]
+  ],
+  "sha1": "a1afb6d06b8a2ef1740982ebdd0caa579048e5eb"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   20,
+   2,
+   2
+  ],
+  "count": 120,
+  "bbox": [
+   [
+    5,
+    2,
+    2
+   ],
+   [
+    34,
+    3,
+    3
+   ]
+  ],
+  "sha1": "4454d686537ff9c131da64d70701c5b476407ac3"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   39,
+   51,
+   4
+  ],
+  "count": 160,
+  "bbox": [
+   [
+    36,
+    43,
+    0
+   ],
+   [
+    39,
+    51,
+    8
+   ]
+  ],
+  "sha1": "8f85ed381dab491d8f2c2b5d44074ced9ed60892"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   2,
+   12,
+   6
+  ],
+  "count": 18,
+  "bbox": [
+   [
+    2,
+    12,
+    6
+   ],
+   [
+    4,
+    17,
+    6
+   ]
+  ],
+  "sha1": "9f281b196ffdaf0c4e2e744831f8b36fda0bbd4c"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   12,
+   9,
+   6
+  ],
+  "count": 624,
+  "bbox": [
+   [
+    5,
+    9,
+    6
+   ],
+   [
+    18,
+    20,
+    13
+   ]
+  ],
+  "sha1": "67f0552fd72d1fa54736adc60ef474b052b98c2f"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   21,
+   17,
+   6
+  ],
+  "count": 18,
+  "bbox": [
+   [
+    19,
+    12,
+    6
+   ],
+   [
+    21,
+    17,
+    6
+   ]
+  ],
+  "sha1": "a13aba5e2dda2461dcbfd1bb348b13c66fda00a0"
+ }
+]

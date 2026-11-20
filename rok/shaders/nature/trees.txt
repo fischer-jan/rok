@@ -1,0 +1,243 @@
+// xs nature/trees [Style] [Trunk] [Trunk Width] [Crown Width] [Clumps] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Style'        var = 'm_style'    range = '0 1'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Trunk'        var = 'm_trunk'    range = '10 70'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Trunk Width'  var = 'm_trunk_w'  range = '1 16'    value = '3'    step = '1'  precision = '0' }
+// arg : { name = 'Crown Width'  var = 'm_crown_w'  range = '20 100'  value = '90'   step = '1'  precision = '0' }
+// arg : { name = 'Clumps'       var = 'm_clumps'   range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'         var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'A leafy tree or a fir, with trunk and crown'
+// rok_flags : 'joined own_grid'
+// rok_colours : { start = '0'  rgb = '4A3222 6E4A30 2E5A1F 44802C 6BAA3C' }
+// rok_tip Style : 0 makes a leafy tree with three branches. 1 makes a fir with tiers of boughs. The other
+// rok_tip Style : arguments mean something a little different for each style, as their own tips say.
+// rok_tip Trunk : Where the crown starts, as a share of the grid height, in percent. 10 gives a crown that fills
+// rok_tip Trunk : most of the tree. 70 gives a tall bare trunk and a small crown. For a fir the bare trunk is half
+// rok_tip Trunk : of this share.
+// rok_tip Trunk Width : The trunk's width in cells, 1 to 16. Style 0 only. A root flare makes the foot wider. No effect
+// rok_tip Trunk Width : with Style 1: a fir's trunk width follows its size (the crown width), not this value.
+// rok_tip Crown Width : The width of the crown as a share of the grid width, in percent. For a fir it is the width of
+// rok_tip Crown Width : the lowest tier. 20 is narrow. 100 is nearly the full width. The tree never touches the grid
+// rok_tip Crown Width : sides, also not at 100.
+// rok_tip Clumps : Style 0 only for the clumps: how far the six clumps round the big middle clump stand out, in
+// rok_tip Clumps : percent. 0 gives one round ball, 100 gives six clumps spread wide, and the middle clump gets
+// rok_tip Clumps : smaller. For a fir (Style 1) it is how ragged the rims of the boughs are, from smooth at 0 to
+// rok_tip Clumps : ragged at 100.
+// rok_tip Seed : Picks another random layout of the same kind. Any whole number from 0 to 9999. The same seed
+// rok_tip Seed : always gives the same result.
+// Rok puts these colours in the palette from the selected colour on: dark and
+// light bark, then dark, middle and light leaves.
+
+// One tree that fills the grid. Style 0 is a leafy tree: a trunk with a root
+// flare, three branches, and a crown of round leaf clumps. Style 1 is a fir:
+// tiers of boughs that narrow to a point. Trunk is where the crown starts, as
+// a share of the grid's height (a fir starts at half of that, as its lowest
+// boughs droop). Trunk Width is the trunk's width in cells. Crown Width is the
+// crown's width as a share of the grid. Clumps is how lumpy a crown is, or
+// how ragged a fir's boughs are. The crown is lit from above and from the
+// front: a light top, a dark underside. It never touches the grid's sides.
+// The voxels already there stay.
+
+// ---- The tree kit: the same in trees, foliage, woodland, pine_forest,
+// autumn_grove and jungle. A change here belongs in all six. ----
+
+float fo_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float fo_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float fo_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(fo_hash3(i), fo_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(fo_hash3(i + vec3(0.0, 1.0, 0.0)), fo_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(fo_hash3(i + vec3(0.0, 0.0, 1.0)), fo_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(fo_hash3(i + vec3(0.0, 1.0, 1.0)), fo_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// The sun comes from above and from the front left of the usual view (-y).
+// Leaves that face it get the light colour, leaves that face away the dark one.
+vec3 fo_sun() { return vec3(0.0, -0.53, 0.85); }
+
+// The angle of o around the trunk. atan(0, 0) is not defined and comes out
+// as NaN on some GPUs, which passes every test after it: the cell on the
+// axis gets a tiny nudge.
+float fo_angle(vec2 o) { return atan(o.y, o.x + 0.0001); }
+
+// The distance from p to the segment a-b: for branches.
+float fo_seg(vec3 p, vec3 a, vec3 b) {
+  vec3 pa = p - a;
+  vec3 ba = b - a;
+  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.001), 0.0, 1.0);
+  return length(pa - ba * h);
+}
+
+// A crown of leaf clumps. q is the cell's place from the crown's middle, rad
+// its half width (x) and half height (y), p the cell in the world (for the
+// noise). Seven round clumps: one big one in the middle, six around it.
+// lumps (0..1) is how far the six stand out, leaf the size of the bumps on
+// the skin in cells, holes (0..1) how many gaps the skin has. The gaps are
+// one cell deep, so no leaf comes loose. Returns the leaf shade: 2 dark,
+// 3 middle, 4 light; -1 outside. The shade comes from the side the leaf
+// faces (its clump's side and the whole crown's side), so each clump has a
+// light top and a dark underside and the crown reads as round, not as noise.
+float fo_crown(vec3 q, vec2 rad, float lumps, float leaf, float holes, float s, vec3 p) {
+  float best = -1000.0;
+  vec3 bc = vec3(0.0);
+  float squash = rad.x / max(rad.y, 1.0);
+  for (int k = 0; k < 7; k++) {
+    float fk = float(k);
+    vec3 cc = vec3(0.0, 0.0, rad.y * 0.2);
+    float r = rad.x * (0.85 - 0.35 * lumps);
+    if (k > 0) {
+      float a = fk * 1.0472 + fo_hash(vec2(s, fk)) * 0.8;
+      float out_ = (0.55 + 0.2 * fo_hash(vec2(s, fk + 9.0))) * lumps;
+      float h = (fo_hash(vec2(s, fk + 19.0)) - 0.65) * 0.8;
+      cc = vec3(cos(a) * rad.x * out_, sin(a) * rad.x * out_, h * rad.y);
+      r = rad.x * (0.36 + 0.12 * fo_hash(vec2(s, fk + 29.0)));
+    }
+    vec3 d = q - cc;
+    d.z *= squash;
+    float f = r - length(d);
+    if (f > best) { best = f; bc = cc; }
+  }
+  // The leafy skin: bumps about leaf/2 cells high.
+  float fq = 1.2 / max(leaf, 1.0);
+  float n = (fo_noise(p * fq + vec3(s)) - 0.5) * (0.6 + 0.45 * leaf) + (fo_noise(p * 0.9 + vec3(s * 1.3)) - 0.5) * 0.5;
+  float e = best + n;
+  if (e < 0.0) return -1.0;
+  if (e < 1.0 && fo_noise(p * 0.7 + vec3(s * 2.1)) < holes * 0.55) return -1.0;
+  vec3 a = q - bc;
+  vec3 b = q / vec3(rad.x, rad.x, rad.y);
+  vec3 nrm = normalize(a + vec3(0.0, 0.0, 0.001)) * 0.65 + normalize(b + vec3(0.0, 0.0, 0.001)) * 0.35;
+  float lit = dot(nrm, fo_sun()) + (fo_hash3(floor(p) + vec3(s)) - 0.5) * 0.2 + n * 0.06;
+  if (lit > 0.38) return 4.0;
+  if (lit > -0.22) return 3.0;
+  return 2.0;
+}
+
+// Bark: 1 light, 0 dark, -1 outside. A trunk from the ground (rel 0) to top,
+// rt wide (radius), leaning by lean at its top, with a root flare at its
+// foot. The light and dark bark run in streaks along the trunk.
+float fo_trunk(vec2 off, float rel, float top, float rt, vec2 lean, float s) {
+  if (rel < 0.0 || rel > top) return -1.0;
+  float k = rel / max(top, 1.0);
+  vec2 o = off - lean * k * k;
+  float a = fo_angle(o);
+  float foot = max(0.0, 1.0 - rel / max(rt * 2.5, 1.6));
+  float roots = max(0.0, cos(4.0 * a + s)) * foot * foot;
+  float r = rt * (1.0 - 0.3 * k) + rt * foot * 0.5 + roots * (rt + 0.8);
+  if (length(o) > r + 0.05) return -1.0;
+  return fo_hash3(vec3(floor(a * 1.6 + 5.0), floor(rel / 3.0), s)) < 0.35 ? 1.0 : 0.0;
+}
+
+// A leafy tree: 0/1 bark, 2..4 leaves, -1 nothing. c is the middle of its
+// crown (z from the ground), rad the crown's half sizes, rt the trunk's
+// radius. Three branches fork from the trunk into the crown.
+float fo_leafy(vec2 off, float rel, vec3 c, vec2 rad, float lumps, float rt, float s, vec3 p) {
+  vec3 q = vec3(off, rel) - c;
+  float leaf = fo_crown(q, rad, lumps, 3.0, 0.3, s, p);
+  if (leaf >= 0.0) return leaf;
+  float bark = fo_trunk(off, rel, c.z, rt, c.xy, s);
+  if (bark >= 0.0) return bark;
+  // Branches: from the trunk below the crown up and out into it.
+  vec3 fork = vec3(c.xy * 0.6, c.z - rad.y * 0.75);
+  float br = max(0.55, rt * 0.6);
+  for (int k = 0; k < 3; k++) {
+    float a = float(k) * 2.094 + fo_hash(vec2(s, 40.0)) * 6.28;
+    vec3 tip = c + vec3(cos(a) * rad.x * 0.6, sin(a) * rad.x * 0.6, -rad.y * 0.1);
+    if (fo_seg(vec3(off, rel), fork, tip) < br) return 0.0;
+  }
+  return -1.0;
+}
+
+// A fir: 0/1 bark, 2..4 needles, 5 snow, -1 nothing. ht is its height, W the
+// radius of its lowest tier, b the bare trunk below the needles, rag (0..1)
+// how ragged the rims are, snow 0..100. Tiers of boughs, each a skirt: a
+// low cone that bends down at its rim; the top tier ends in a point. The
+// underside of a tier is dark, its top light on the sun side. Snow lies on
+// the tops of the tiers.
+float fo_fir(vec2 off, float rel, float ht, float W, float b, float rag, float snow, float s, vec3 p) {
+  float d = length(off);
+  float rt = max(0.6, W * 0.12);
+  float tiers = clamp(floor((ht - b) / 4.5), 3.0, 7.0);
+  float span = (ht - b) / tiers;
+  float a = fo_angle(off);
+  float face = d > 0.5 ? dot(off / d, fo_sun().xy) : 1.0;
+  for (int i = 6; i >= 0; i--) {
+    float fi = float(i);
+    if (fi >= tiers) continue;
+    float z0 = b + fi * span;
+    bool top = fi + 1.0 >= tiers;
+    float R = W * (1.0 - 0.85 * fi / tiers) + 0.5;
+    // The top tier is a cone, not too steep: a steep one ends in a thin pole
+    // on a grid of cells.
+    if (top) R = max(R, 2.2);
+    float H = top ? min(ht - z0, R * 1.6 + 1.0) : span * 1.6;
+    // The rim is ragged: nine boughs a tier, each its own length.
+    float bough = floor((a / 6.2832 + 0.5) * 9.0 + fo_hash(vec2(s, fi)) * 9.0);
+    R *= 1.0 - 0.2 * rag + 0.32 * rag * fo_hash(vec2(s + fi * 7.0, bough));
+    float u = d / R;
+    if (u > 1.0) continue;
+    // The skirt bends down at the rim, which stays one or two cells thick.
+    float droop = u * u * span * 0.45;
+    // A lower tier is hollow-sided (its top falls fast), the top tier is a
+    // plain cone, so the tip is never a thin spike.
+    float fall = top ? 1.0 - u : pow(1.0 - u, 1.5);
+    float zt = z0 + H * fall - droop;
+    float zb = min(z0 - droop - 1.0, zt - 1.0);
+    if (rel < zb - 0.5 || rel > zt + 0.5) continue;
+    if (rel < zb + 0.5 && u > 0.25) return 2.0;  // the dark underside
+    if (rel > zt - 0.9) {
+      // The top: snow, or light needles on the sun side. Near the trunk
+      // the top faces up, so it is lit from every side.
+      if (snow > 0.5 && fo_noise(p * 0.3 + vec3(s)) * 100.0 < snow * 1.1 + 5.0 - 15.0 * u) return 5.0;
+      return face * u + 0.5 * (1.0 - u) + (fo_hash3(floor(p) + vec3(s)) - 0.5) * 0.3 > -0.15 ? 4.0 : 3.0;
+    }
+    return fo_hash3(floor(p) + vec3(s + 1.0)) < 0.2 ? 2.0 : 3.0;
+  }
+  // The trunk runs up to the top tier, so a slim fir never breaks apart.
+  if (d < rt + 0.05 && rel >= 0.0 && rel < ht - span) {
+    return fo_hash3(vec3(floor(a * 1.6 + 5.0), floor(rel / 3.0), s)) < 0.35 ? 1.0 : 0.0;
+  }
+  return -1.0;
+}
+
+float map(vec3 v) {
+  vec3 p = floor(v) + 0.5;
+  vec3 size = i_volume_size;
+  float s = m_seed * 17.3 + 1.0;
+  vec2 off = p.xy - (floor(size.xy * 0.5) + 0.5);
+  float rel = p.z;
+  float ht = size.z - 1.0;
+  float half_ = max(min(size.x, size.y) * 0.5 - 1.0, 2.0);
+  float lumps = m_clumps / 100.0;
+  float t;
+  if (m_style < 0.5) {
+    float base = size.z * m_trunk / 100.0;
+    // The crown reaches past its middle clump by the clumps around it and
+    // by its leafy skin; both are counted so it stays inside the grid.
+    float wx = (half_ - 1.5) / max(0.9, 0.75 * lumps + 0.5) * m_crown_w / 100.0;
+    vec2 rad = vec2(max(wx, 1.5), max((ht - base) / 1.6, 1.5));
+    vec2 lean = (vec2(fo_hash(vec2(s, 50.0)), fo_hash(vec2(s, 51.0))) - 0.5) * max(0.0, min(rad.x * 0.25, half_ - 1.0 - rad.x));
+    vec3 c = vec3(lean, ht - rad.y * 0.85 - 1.5);
+    t = fo_leafy(off, rel, c, rad, lumps, m_trunk_w * 0.5, s, p);
+  } else {
+    float W = (half_ - 0.5) / (1.0 + 0.12 * lumps) * m_crown_w / 100.0 * 0.85 - 0.5;
+    t = fo_fir(off, rel, ht, max(W, 1.5), ht * m_trunk / 200.0, lumps, 0.0, s, p);
+  }
+  if (t >= 0.0) return i_color_index + t;
+  return voxel(v);
+}

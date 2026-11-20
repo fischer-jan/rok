@@ -1,0 +1,105 @@
+// xs weathering/water_fill [Level] [Waves] [Wave Size] [Depth] [Foam] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Level'      var = 'm_level'  range = '1 100'  value = '30'  step = '1'  precision = '0' }
+// arg : { name = 'Waves'      var = 'm_waves'  range = '0 6'    value = '2'   step = '1'  precision = '0' }
+// arg : { name = 'Wave Size'  var = 'm_wsize'  range = '2 40'   value = '8'   step = '1'  precision = '0' }
+// arg : { name = 'Depth'      var = 'm_depth'  range = '1 40'   value = '10'  step = '1'  precision = '0' }
+// arg : { name = 'Foam'       var = 'm_foam'   range = '0 1'    value = '1'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'   range = '0 9999' value = '0'   step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Water tinted by its depth, with waves and shore foam'
+// rok_colours : { start = '0'  rgb = 'E6F3FA 8CCBEF 4FA3DB 2F78BD 1B4A86'  names = 'Foam, Shallows, Shallow water, Middle water, Deep water' }
+// Rok puts these colours in the palette from the selected colour on: foam,
+// light water (the shallows), shallow, middle and deep water.
+// rok_tip Level : The height of the water as a percent of the height of the grid. 1 fills only the lowest layer. 100 fills up to the top of the grid. Water only fills empty cells and never reaches above this level.
+// rok_tip Waves : How deep the surface can dip below Level, in cells. 0 gives a flat surface. 1 dips the lower half of the waves by one cell. 6 gives troughs up to 6 cells deep.
+// rok_tip Wave Size : How far apart the wave crests are, in cells. It has no effect while Waves is 0.
+// rok_tip Depth : The number of cells of water that count as fully deep, so that it gets the darkest colour. Low values make the water dark quickly. High values keep it light over a long distance.
+// rok_tip Foam : 1 draws foam along the shore. The shore is a rock, a wall or part of the model within 2 cells of the surface layer. The edge of the grid is not a shore. 0 draws no foam.
+// rok_tip Seed : Picks another random layout of the waves. With Waves at 0 it changes only the broken outer band of the foam.
+
+// Fills every empty cell below Level, a share of the grid's height, with
+// water: valleys, basins and the space around the model, down to the grid's
+// floor. It only adds voxels, and never above Level.
+//
+// The colour follows how deep the water is over the ground below it, as real
+// water does: light where it is shallow, dark where it is deep. Depth is the
+// number of cells that count as fully deep. Under the surface each layer gets
+// darker as well, so a cut through the water shows the gradient.
+//
+// Waves lets the surface dip below Level in troughs up to that many cells
+// deep; Wave Size is how far apart the crests are. The open water stays calm: only
+// the colour changes, in soft bands with the depth. Foam (1) draws a band of
+// foam along every shore, solid where the water meets a wall and broken one
+// cell further out; Foam 0 leaves it out.
+
+float wf_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float wf_noise(vec2 p) {
+  vec3 q = vec3(p, m_seed * 1.7);
+  vec3 i = floor(q);
+  vec3 f = q - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(wf_hash3(i), wf_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(wf_hash3(i + vec3(0.0, 1.0, 0.0)), wf_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  return mix(a, b, u.y);
+}
+
+// How high the wave is at a column, 0 (trough) to 1 (crest).
+float wf_wave(vec2 xy) {
+  return 0.65 * wf_noise(xy / m_wsize) + 0.35 * wf_noise(xy / (m_wsize * 0.45) + 31.7);
+}
+
+float map(vec3 v) {
+  if (voxel(v) > 0.0) return voxel(v);
+  float level = floor(i_volume_size.z * m_level / 100.0);
+  vec2 xy = floor(v.xy) + 0.5;
+  float wave = wf_wave(xy);
+  // The top of the water in this column: the trough dips it, never above Level.
+  float top = max(1.0, level - floor(m_waves * (1.0 - wave) + 0.5));
+  float z = floor(v.z);
+  if (z >= top) return 0.0;
+
+  // How deep the water is here: the empty cells down from the surface to the
+  // ground or the grid's floor, at most Depth.
+  float bed = m_depth;
+  for (int k = 0; k < 40; k++) {
+    if (float(k) >= m_depth) break;
+    float zz = top - 1.0 - float(k);
+    if (zz < 0.0 || voxel(vec3(xy, zz + 0.5)) > 0.0) {
+      bed = float(k);
+      break;
+    }
+  }
+  float below = top - 1.0 - z;  // 0 at the surface layer
+  // Half from the water over the ground, half from the layer's depth.
+  float t = clamp((0.5 * bed + 0.5 * below) / max(m_depth, 1.0), 0.0, 1.0);
+
+  if (below < 0.5) {
+    if (m_foam > 0.5) {
+      // The distance to the nearest wall or rock beside the surface layer.
+      float shore = 3.0;
+      for (int i = -2; i <= 2; i++) {
+        for (int j = -2; j <= 2; j++) {
+          if (i == 0 && j == 0) continue;
+          vec3 at = vec3(xy + vec2(float(i), float(j)), z + 0.5);
+          if (voxel(at) > 0.0 || voxel(at + vec3(0.0, 0.0, 1.0)) > 0.0) {
+            shore = min(shore, max(abs(float(i)), abs(float(j))));
+          }
+        }
+      }
+      // A solid band beside the wall and a broken one a cell further out.
+      if (shore <= 1.0 || (shore <= 2.0 && wf_noise(xy / 2.5 + 7.3) > 0.5)) return i_color_index;
+    }
+  }
+  if (t < 0.12) return i_color_index + 1.0;
+  if (t < 0.3) return i_color_index + 2.0;
+  if (t < 0.62) return i_color_index + 3.0;
+  return i_color_index + 4.0;
+}

@@ -1,0 +1,1 @@
+nav_invert_wheel=on

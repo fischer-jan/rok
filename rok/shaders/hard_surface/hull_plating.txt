@@ -1,0 +1,352 @@
+// xs hard_surface/hull_plating [Size] [Tones] [Contrast] [Seams] [Details] [Hazard] [Seed] [Relief] [Walls]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Size'      var = 'm_size'      range = '6 48'    value = '16'   step = '1'  precision = '0' }
+// arg : { name = 'Tones'     var = 'm_tones'     range = '0 100'   value = '55'   step = '1'  precision = '0' }
+// arg : { name = 'Contrast'  var = 'm_contrast'  range = '3 30'    value = '8'    step = '1'  precision = '0' }
+// arg : { name = 'Seams'     var = 'm_seams'     range = '0 100'   value = '85'   step = '1'  precision = '0' }
+// arg : { name = 'Details'   var = 'm_details'   range = '0 100'   value = '55'   step = '1'  precision = '0' }
+// arg : { name = 'Hazard'    var = 'm_hazard'    range = '0 100'   value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'      var = 'm_seed'      range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Relief'    var = 'm_relief'    range = '0 3'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Walls'     var = 'm_walls'     range = '0 1'     value = '1'    step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = 'F2C230 2A2D33'  names = 'Hazard yellow, Hazard dark' }
+// rok_about : 'Armour plates on hulls: panels, vents, hatches, fins'
+// rok_removes : 'With Relief 1 or more, vents, hatches and other sunk details are cut into the hull (Relief 0 only paints).'
+// rok_tip Size : The edge of the squares, in cells (6 to 48), that each face is cut into. Each square is split two or three times into panels. A small value gives many
+// rok_tip Size : small panels and few details, because a detail needs a panel at least 6 cells wide. Only the surface of a filled model changes.
+// rok_tip Tones : How many panels get another shade, in percent. 0 keeps every panel in the hull colour. 100 shades every panel. A few shaded panels are clearly darker.
+// rok_tip Tones : How far the shades go is set by Contrast.
+// rok_tip Contrast : How much lighter or darker the shaded panels are, in percent of brightness (3 to 30). It also sets how dark panel lines and sunk shapes are. The
+// rok_tip Contrast : shader takes the nearest palette colour for each shade. When no palette colour is near enough, the panel keeps the hull colour. So values below about
+// rok_tip Contrast : 6 often change nothing. The exact limit depends on the hull colour and the palette.
+// rok_tip Seams : How many panels get a panel line on their low edges, in percent. The line is a darker shade of the hull. 0 gives no line. The line stays off an edge
+// rok_tip Seams : of the model. A small Contrast makes the line hard to see.
+// rok_tip Details : How many big panels (6 or more cells on both sides) get one detail, in percent: rivets, grille, hatch, fins, inset, boss or rail. 0 gives no detail.
+// rok_tip Details : With Relief 0 the details are painted as shades and not cut.
+// rok_tip Hazard : How many small panels get yellow and black stripes, in percent. A small panel is 2 to 5 cells on its short side and at least 4 on its long side. It
+// rok_tip Hazard : needs flat hull 3 cells round it. 0 gives no stripes. Small or bent models get few or none.
+// rok_tip Seed : Picks another random layout of the same kind: other panels, shades and details.
+// rok_tip Relief : How many cells a raised plate may stand out (0 to 3). About half of the panels on flat hull are raised plates, 1 to Relief cells high. 0 only paints:
+// rok_tip Relief : no cell is added or cut. Details like fins, bosses and rails stand up to 2 cells above the plate. The sunk details are cut only when Relief is 1 or
+// rok_tip Relief : more.
+// rok_tip Walls : 0 or 1. With 1 all six faces get plating. With 0 the four side faces (toward x and y) stay as they are, and only top and bottom get plating. Use 0
+// rok_tip Walls : before hull_windows.
+
+// Armour plating on a model's surface, the way big ships show it
+// (the first version looked like a grid of black tape; the
+// second only painted, and it had to be as good as greebles, which has
+// real relief).
+// Each face is cut into squares of Size cells; each square is split two or
+// three times into panels, sometimes into long strips. A panel keeps the
+// hull colour or, as often as Tones says, takes a slightly lighter or darker
+// shade; a few take a clearly darker one (a maintenance plate). Contrast is
+// how far the shades go. Seams is how many panels get a panel line: a darker
+// shade of the hull, never black.
+// Relief is how many cells a plate may stand out (0: the shader only paints,
+// as before). About half the panels are raised plates: 1 to Relief cells
+// high, some with a bevel (each layer a cell smaller), always with a gap of
+// one cell to the next panel, and one cell back from an edge of the model.
+// Details is how many big panels get one detail, chosen at random:
+//   0 rivets  - a row of rivet heads along the panel's sides
+//   1 grille  - short slots sunk into the panel, dark inside
+//   2 hatch   - an access hatch: an outline sunk one cell, with a handle
+//   3 fins    - cooling fins: parallel ribs, dark between them
+//   4 inset   - the middle of the panel sunk one cell: a frame around it
+//   5 boss    - a round boss in the middle: a sensor or a bolt head
+//   6 rail    - a bar along the panel's long side, on short posts
+// With Relief 0 a detail is painted in shades instead. A cell is cut only
+// where there is hull behind it, so a thin wall never gets a hole.
+// Walls 0 leaves the side walls (the faces toward x and y) as they are, for
+// hull_windows: on a ship, plate the top and bottom, and give the sides windows.
+// Hazard is how many small panels on a flat stretch get yellow and black
+// stripes (the colours of the rok_colours line); 0 by default. All shades
+// come from the palette: the shader takes the palette colour nearest to the
+// shade, and keeps the colour when the palette has none near enough, so it
+// works with any hull colour.
+
+float hp_hash(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 hp_dir(float n) {
+  float axis = floor(n * 0.5);
+  float sgn = mod(n, 2.0) < 0.5 ? 1.0 : -1.0;
+  return axis < 0.5 ? vec3(sgn, 0.0, 0.0) : (axis < 1.5 ? vec3(0.0, sgn, 0.0) : vec3(0.0, 0.0, sgn));
+}
+
+// The in-plane coordinates of a cell on a face whose normal is along axis a.
+vec2 hp_plane(vec3 c, float a) {
+  return a < 0.5 ? c.yz : (a < 1.5 ? c.xz : c.xy);
+}
+
+vec3 hp_eu(float a) { return a < 0.5 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0); }
+vec3 hp_ev(float a) { return a < 1.5 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0); }
+
+// The palette colour nearest to colour idx made f times as bright, or idx
+// when no colour is clearly nearer to that shade than idx itself.
+float hp_shade(float idx, float f) {
+  vec3 base = palette(idx).rgb;
+  vec3 want = clamp(base * f + (f > 1.0 ? vec3(0.03) : vec3(0.0)), 0.0, 1.0);
+  vec3 e = base - want;
+  float limit = dot(e, e) * 0.4;  // the found colour must be much nearer than idx
+  float best = idx;
+  for (int i = 1; i < 256; i++) {
+    vec3 c = palette(float(i)).rgb - want;
+    float d = dot(c, c);
+    if (d < limit && float(i) != idx) { limit = d; best = float(i); }
+  }
+  return best;
+}
+
+// The face of a filled cell: the first open side, top and bottom first, so
+// an edge belongs to the top; -1 inside.
+float hp_face(vec3 v) {
+  for (int k = 0; k < 6; k++) {
+    float n = mod(float(k) + 4.0, 6.0);
+    if (voxel(v + hp_dir(n)) == 0.0) return n;
+  }
+  return -1.0;
+}
+
+// A cell of face n's outer layer: filled, open in front.
+bool hp_skin(vec3 p, vec3 d) {
+  return voxel(p) != 0.0 && voxel(p + d) == 0.0;
+}
+
+// The panel at in-plane q on face n: the square, split up to three times.
+void hp_panel(vec2 q, float n, out vec2 lo, out vec2 hi, out vec3 id) {
+  vec2 cell = floor(q / m_size);
+  lo = cell * m_size;
+  hi = lo + m_size;
+  float side = n + m_seed * 0.1;
+  for (int level = 0; level < 3; level++) {
+    vec2 size = hi - lo;
+    vec3 lid = vec3(lo + hi * 0.37, side + float(level) * 7.0);
+    float longer = max(size.x, size.y);
+    if (longer < 5.0 || (level > 0 && hp_hash(lid) < 0.25 + 0.15 * float(level))) break;
+    // A strip now and then: a cut close to one side.
+    float f = hp_hash(lid + 1.3) < 0.3 ? 0.2 + 0.1 * hp_hash(lid + 9.1) : 0.35 + 0.3 * hp_hash(lid + 9.1);
+    float t = max(2.0, floor(f * longer));
+    if (size.x >= size.y) {
+      if (q.x < lo.x + t) hi.x = lo.x + t; else lo.x += t;
+    } else {
+      if (q.y < lo.y + t) hi.y = lo.y + t; else lo.y += t;
+    }
+  }
+  id = vec3(lo * 1.13 + hi * 0.71, side + 31.0);
+}
+
+// The panel's tone: quiet, a few clearly darker.
+float hp_tone(vec3 id, float base) {
+  float k = m_contrast / 100.0;
+  if (hp_hash(id + 4.3) * 100.0 >= m_tones) return base;
+  float g = hp_hash(id + 6.7);
+  return hp_shade(base, g < 0.12 ? 1.0 - 2.2 * k : (g < 0.56 ? 1.0 - k : 1.0 + k));
+}
+
+// How many cells the panel stands out: 0 for a flat one.
+float hp_height(vec3 id, vec2 size) {
+  if (m_relief < 0.5 || min(size.x, size.y) < 3.0) return 0.0;
+  if (hp_hash(id + 11.7) >= 0.45) return 0.0;
+  return 1.0 + floor(hp_hash(id + 12.3) * m_relief);
+}
+
+// The panel's detail, -1 for none.
+float hp_kind(vec3 id, vec2 size) {
+  if (min(size.x, size.y) < 6.0 || hp_hash(id + 5.4) * 100.0 >= m_details) return -1.0;
+  return floor(hp_hash(id + 3.9) * 7.0);
+}
+
+bool hp_in(vec2 uv, vec2 lo, vec2 hi) {
+  return all(greaterThanEqual(uv, lo)) && all(lessThan(uv, hi));
+}
+
+// The colour of the cell at uv on a panel of height h, k cells out from the
+// hull's outer layer (k 0 is that layer, k -1 the cell behind it). 0 leaves
+// the cell empty, -1 gives it the plain colour (the tone on the plate and
+// the outer layer, the cell as it was behind). cut: the outer layer may be
+// cut here (there is hull behind and the face is flat).
+float hp_at(float kind, vec3 id, vec2 uv, vec2 size, float h, float k, float tone, float base, bool cut) {
+  float c = m_contrast / 100.0;
+  bool relief = m_relief > 0.5;
+  bool along_x = size.x >= size.y;
+  vec2 m = floor(size * 0.5);
+  // The bevel: a stepped plate shrinks a cell a layer.
+  float inset = (h >= 2.0 && hp_hash(id + 13.9) < 0.5) ? max(k - 1.0, 0.0) : 0.0;
+  if (k >= 1.0 && k <= h && !hp_in(uv, vec2(1.0 + inset), size - inset)) return 0.0;
+  // A sunk shape on top of the panel: the top layer is open (or cut, on a
+  // flat panel), the layer under it dark.
+  bool sunk = false;
+  float bottom = hp_shade(tone, 1.0 - max(3.0 * c, 0.24));
+  if (kind > 0.5 && kind < 1.5) {
+    // Grille: short slots across the middle.
+    vec2 g = uv - m;
+    sunk = along_x ? (abs(g.x) <= 3.0 && abs(g.y) <= 1.0 && mod(uv.x, 2.0) == 0.0)
+                   : (abs(g.y) <= 3.0 && abs(g.x) <= 1.0 && mod(uv.y, 2.0) == 0.0);
+  } else if (kind > 1.5 && kind < 2.5) {
+    // Hatch: an outline two cells in, a handle in its middle.
+    sunk = (uv.x == 2.0 || uv.x == size.x - 3.0 || uv.y == 2.0 || uv.y == size.y - 3.0)
+           && hp_in(uv, vec2(2.0), size - 2.0);
+    bottom = hp_shade(tone, 1.0 - max(2.0 * c, 0.16));
+    vec2 hd = along_x ? vec2(abs(uv.x - m.x), uv.y - 4.0) : vec2(uv.x - 4.0, abs(uv.y - m.y));
+    bool handle = along_x ? (hd.y == 0.0 && hd.x <= 1.0) : (hd.x == 0.0 && hd.y <= 1.0);
+    if (handle && min(size.x, size.y) >= 9.0) {
+      if (relief && k == h + 1.0) return hp_shade(tone, 1.0 - max(1.5 * c, 0.12));
+      if (!relief && k == 0.0) return hp_shade(tone, 1.0 - max(1.5 * c, 0.12));
+    }
+  } else if (kind > 3.5 && kind < 4.5) {
+    // Inset: the middle sunk, a frame of two cells around it.
+    sunk = hp_in(uv, vec2(3.0), size - 2.0);
+    bottom = hp_shade(tone, 1.0 - max(1.2 * c, 0.1));
+  }
+  if (sunk) {
+    if (!relief) return k == 0.0 ? bottom : -1.0;
+    if (k == h) return (h >= 1.0 || cut) ? 0.0 : bottom;
+    if (k == h - 1.0) return (h >= 1.0 || cut) ? bottom : -1.0;
+    return k > h ? 0.0 : -1.0;
+  }
+  if (kind < 0.5 && kind > -0.5) {
+    // Rivets: a head every other cell, two in from the sides.
+    bool on_x = (uv.x == 2.0 || uv.x == size.x - 2.0) && mod(uv.y, 2.0) == 0.0 && uv.y >= 2.0 && uv.y <= size.y - 2.0;
+    bool on_y = (uv.y == 2.0 || uv.y == size.y - 2.0) && mod(uv.x, 2.0) == 0.0 && uv.x >= 2.0 && uv.x <= size.x - 2.0;
+    if (on_x || on_y) {
+      float rivet = hp_shade(tone, 1.0 + max(1.6 * c, 0.12));
+      if (relief ? k == h + 1.0 : k == 0.0) return rivet;
+    }
+  } else if (kind > 2.5 && kind < 3.5) {
+    // Fins: ribs across the panel, every other cell, two high.
+    float a = along_x ? uv.x : uv.y;
+    float b = along_x ? uv.y : uv.x;
+    float la = along_x ? size.x : size.y;
+    float lb = along_x ? size.y : size.x;
+    bool span = a >= 2.0 && a < la - 1.0 && b >= 2.0 && b < lb - 1.0;
+    if (span && mod(a, 2.0) == 0.0) {
+      if (relief ? (k > h && k <= h + 2.0) : k == 0.0) return relief ? tone : hp_shade(tone, 1.0 + max(1.6 * c, 0.12));
+    } else if (span && (relief ? k == h : k == 0.0)) {
+      return bottom;
+    }
+  } else if (kind > 4.5 && kind < 5.5) {
+    // Boss: a round plate in the middle, a cap on it.
+    vec2 g = uv - m + 0.5;
+    float r = min(min(size.x, size.y) * 0.5 - 2.0, 4.0);
+    float dd = dot(g, g);
+    if (dd <= r * r) {
+      float rim = hp_shade(tone, 1.0 - max(1.5 * c, 0.12));
+      if (!relief) return k == 0.0 ? (dd <= (r - 1.5) * (r - 1.5) ? rim : bottom) : -1.0;
+      if (k == h + 1.0) return rim;
+      if (k == h + 2.0 && dd <= (r - 1.5) * (r - 1.5)) return tone;
+    }
+  } else if (kind > 5.5) {
+    // Rail: a bar two cells in from a long side, on posts every four cells.
+    float a = along_x ? uv.x : uv.y;
+    float b = along_x ? uv.y : uv.x;
+    float la = along_x ? size.x : size.y;
+    bool bar = b == 2.0 && a >= 2.0 && a <= la - 2.0;
+    float light = hp_shade(tone, 1.0 + max(1.6 * c, 0.12));
+    if (bar && !relief && k == 0.0) return light;
+    if (bar && relief) {
+      if (k == h + 2.0) return light;
+      if (k == h + 1.0 && (mod(a - 2.0, 4.0) == 0.0 || a == la - 2.0)) return tone;
+    }
+  }
+  if (k > h) return 0.0;
+  return -1.0;
+}
+
+// Hazard stripes on a few small panels on a flat stretch of hull (a small
+// model's many little faces would turn into yellow spots).
+bool hp_hazard(vec3 v, vec3 d, float a, vec3 id, vec2 size) {
+  float small = min(size.x, size.y);
+  if (small < 2.0 || small > 5.0 || max(size.x, size.y) < 4.0 || hp_hash(id + 8.8) * 100.0 >= m_hazard) return false;
+  vec3 eu = 3.0 * hp_eu(a);
+  vec3 ev = 3.0 * hp_ev(a);
+  return hp_skin(v + eu, d) && hp_skin(v - eu, d) && hp_skin(v + ev, d) && hp_skin(v - ev, d);
+}
+
+// Flat around: the outer layer goes on a cell either side, so a plate keeps
+// a cell back from an edge or a corner.
+bool hp_flat(vec3 s, vec3 d, float a) {
+  vec3 eu = hp_eu(a);
+  vec3 ev = hp_ev(a);
+  return hp_skin(s + eu, d) && hp_skin(s - eu, d) && hp_skin(s + ev, d) && hp_skin(s - ev, d);
+}
+
+// The colour of a cell k cells out (k 0: the outer layer, -1: behind it)
+// over the outer-layer cell s of face n.
+float hp_cell(vec3 s, float n, float k, float here) {
+  if (m_walls < 0.5 && n < 3.5) return k >= 1.0 ? 0.0 : here;  // a side wall, left for windows
+  float a = floor(n * 0.5);
+  vec3 d = hp_dir(n);
+  float base = voxel(s);
+  vec2 q = hp_plane(floor(s), a);
+  vec2 lo;
+  vec2 hi;
+  vec3 id;
+  hp_panel(q, n, lo, hi, id);
+  vec2 uv = q - lo;
+  vec2 size = hi - lo;
+  bool even = hp_flat(s, d, a);
+  float h = even ? hp_height(id, size) : 0.0;
+  float kind = hp_kind(id, size);
+  if (k <= 0.0 && !even) kind = m_relief > 0.5 ? -1.0 : kind;  // no cuts at an edge
+  if (k >= 1.0 && !even) return 0.0;
+  if (k == 0.0) {
+    // The panel line on the panel's low edges, only where the face goes on
+    // past it, so an edge of the model stays clean. A darker shade of the hull.
+    float c = m_contrast / 100.0;
+    vec3 eu = hp_eu(a);
+    vec3 ev = hp_ev(a);
+    bool lines = hp_hash(id + 2.1) * 100.0 < m_seams;
+    bool seam_x = lines && uv.x == 0.0 && hp_skin(s - eu, d);
+    bool seam_y = lines && uv.y == 0.0 && hp_skin(s - ev, d);
+    if (seam_x || seam_y) return hp_shade(base, 1.0 - max(2.5 * c, 0.16));
+  }
+  float tone = hp_tone(id, base);
+  bool hazard = hp_hazard(s, d, a, id, size);
+  bool cut = voxel(s - d) != 0.0 && even;
+  float col = hp_at(hazard ? -1.0 : kind, id, uv, size, h, k, tone, base, cut);
+  if (col == 0.0) return 0.0;
+  if (col > 0.0) return col;
+  if (k < 0.0) return here;
+  if (hazard && k == h) return mod(q.x + q.y, 4.0) < 2.0 ? color_sel(0.0) : color_sel(1.0);
+  return tone;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here > 0.0) {
+    float open = hp_face(v);
+    if (open >= 0.0) return hp_cell(v, open, 0.0, here);
+    if (m_relief < 0.5) return here;
+    // Just behind the outer layer: dark under a cut.
+    for (int n = 0; n < 6; n++) {
+      vec3 d = hp_dir(float(n));
+      vec3 s = v + d;
+      if (voxel(s) == 0.0 || voxel(s + d) != 0.0 || hp_face(s) != float(n)) continue;
+      float col = hp_cell(s, float(n), -1.0, here);
+      if (col != here) return col;
+    }
+    return here;
+  }
+  if (m_relief < 0.5) return 0.0;
+  // Empty space: a plate or a detail over the outer layer, k cells out.
+  for (int j = 0; j < 6; j++) {
+    float n = mod(float(j) + 4.0, 6.0);
+    vec3 d = hp_dir(n);
+    for (int k = 1; k <= 5; k++) {  // a plate of 3 and fins of 2
+      vec3 s = v - d * float(k);
+      if (voxel(s) == 0.0) continue;
+      if (hp_face(s) == n) {
+        float col = hp_cell(s, n, float(k), 0.0);
+        if (col > 0.0) return col;
+      }
+      break;
+    }
+  }
+  return 0.0;
+}

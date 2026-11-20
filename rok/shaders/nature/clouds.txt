@@ -1,0 +1,157 @@
+// xs nature/clouds [Size] [Density] [Height] [Puffiness] [Flat Bottom] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Size'         var = 'm_size'    range = '4 60'    value = '30'   step = '1'  precision = '0' }
+// arg : { name = 'Density'      var = 'm_density' range = '0 100'   value = '70'   step = '1'  precision = '0' }
+// arg : { name = 'Height'       var = 'm_alt'     range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Puffiness'    var = 'm_puffy'   range = '0 100'   value = '40'   step = '1'  precision = '0' }
+// arg : { name = 'Flat Bottom'  var = 'm_flat'    range = '0 100'   value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'         var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Big puffy clouds: white tops, flat grey bases'
+// rok_flags : 'own_grid'
+// rok_colours : { start = '0'  rgb = 'FFFFFF E4E9F0 BCC6D4 8E9AB0' }
+// Rok puts these colours in the palette from the selected colour on: white,
+// light grey, grey and blue-grey.
+// rok_tip Size : The length of a big cloud in cells. Each cloud is 0.75 to 1.15 times this. Small values give many small clouds. Large values give fewer, longer clouds. The value is capped at 0.68 times the smaller of the grid width and depth. So on a 24 grid, values above 16 change nothing. On a 64 grid, values above 43 change nothing.
+// rok_tip Density : How many of the possible cloud places get a cloud, in percent. 0 gives no clouds. 100 fills every place, so clouds touch and form a bank. The number of places depends on Size and on the grid width. Only on a grid about 6 cells wide is there one place, and then it always gets a cloud.
+// rok_tip Height : Where the clouds float, as a percent of the grid height. 0 puts the bases near the floor. 100 puts them near the top, and the cloud moves down so its top still fits. Each cloud sits a little higher or lower than the others.
+// rok_tip Puffiness : How lumpy the tops of the clouds are. 0 gives smooth round puffs. 100 gives strong lumps. The base stays flat. The lumps are small, so on grids under 64 only a few cells change.
+// rok_tip Flat Bottom : How flat the underside of a cloud is. 100 cuts the base flat at the lower edge of the body. 0 lets the round body hang below by up to 12 percent of the cloud length.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the clouds and changes their shapes.
+
+// Cumulus clouds over the grid. The voxels already there stay.
+//
+// A cloud is a row of round puffs. The puffs in the middle are big and high,
+// the puffs at the ends are small and low. The puffs melt into each other
+// (a smooth union), so the cloud is one soft mass and not a pile of balls.
+// A noise makes the lumps of the top. The base is cut flat, as the base of
+// a real cumulus is.
+//
+// Size is the length of a cloud in cells. Density is how many places have a
+// cloud: at a high density the clouds touch and make a bank. Height is where
+// the clouds float, as a share of the grid's height. Puffiness is how lumpy
+// the tops are. Flat Bottom is how flat the base is cut.
+//
+// The light comes from above and a little from the side. A cell with open
+// sky over it is white. A cell in the shade of the cloud is grey. The base
+// is blue-grey.
+
+float cl_hash(float n) {
+  n = fract(n * 0.1031);
+  n *= n + 33.33;
+  n *= n + n;
+  return fract(n);
+}
+
+float cl_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float cl_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(cl_hash3(i), cl_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(cl_hash3(i + vec3(0.0, 1.0, 0.0)), cl_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(cl_hash3(i + vec3(0.0, 0.0, 1.0)), cl_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(cl_hash3(i + vec3(0.0, 1.0, 1.0)), cl_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+// A smooth minimum: two round shapes melt into each other over the width k.
+float cl_smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+// The usual length of a cloud: Size, but never so long that a cloud does not
+// fit in the grid.
+float cl_len() {
+  vec3 size = i_volume_size;
+  return max(5.0, min(m_size, min(size.x, size.y) * 0.68));
+}
+
+// The signed distance to the cloud of place id (below 0: inside). The
+// cloud's base is at height `base`.
+float cl_cloud(vec3 p, vec2 id, float spacing) {
+  vec3 size = i_volume_size;
+  float s = dot(id, vec2(12.9898, 78.233)) + m_seed * 17.3;
+  float L = cl_len() * (0.75 + 0.4 * cl_hash(s + 3.9));
+  // The centre: jittered in its place, but always inside the grid.
+  vec2 c = (id + 0.5 + 0.45 * (vec2(cl_hash(s + 1.3), cl_hash(s + 2.6)) - 0.5)) * spacing;
+  float half_len = L * 0.6;
+  c = clamp(c, vec2(half_len + 1.0), max(size.xy - half_len - 1.0, vec2(half_len + 1.0)));
+  // Most clouds are low and wide, a few are tall towers.
+  float tall = cl_hash(s + 4.4);
+  float H = L * (0.26 + 0.3 * tall * tall);
+  float base = size.z * m_alt / 100.0 - H * 0.45 + (cl_hash(s + 5.1) - 0.5) * min(size.z * 0.2, L * 0.4);
+  base = clamp(base, 1.0, max(size.z - H - 2.0, 1.0));
+  // A low grid squashes the cloud, so its top is never cut off.
+  float squash = max(1.0, (0.7 * H + 0.3 * L) / max(size.z - 1.0 - base, 1.0));
+  // Turn the cloud a little, so the clouds do not all line up.
+  float ang = (cl_hash(s + 6.4) - 0.5) * 1.0;
+  vec2 d = p.xy - c;
+  vec3 q = vec3(cos(ang) * d.x + sin(ang) * d.y, -sin(ang) * d.x + cos(ang) * d.y, (p.z - base) * squash);
+  if (abs(q.x) > L * 0.75 || abs(q.y) > L * 0.6 || q.z > H * 1.5 + 2.0 || q.z < -L * 0.3) return 99.0;
+  // The body: a long, low, round bun. Its lower half is cut off below.
+  vec3 b = q / vec3(L * 0.5, L * 0.32, H * 0.36);
+  float dist = (length(b) - 1.0) * min(H * 0.36, L * 0.32);
+  // The puffs on the body: big ones in the middle sit high, small ones at the
+  // ends sit low. They melt into the body only a little, so each puff shows.
+  for (int k = 0; k < 8; k++) {
+    float sk = s + float(k) * 7.77;
+    float u = (float(k) + 0.25 + 0.5 * cl_hash(sk + 0.7)) / 8.0;
+    float mid = 1.0 - abs(2.0 * u - 1.0);  // 1 in the middle, 0 at the ends
+    float r = L * (0.08 + 0.12 * mid + 0.05 * cl_hash(sk + 3.3));
+    vec3 o = vec3((u - 0.5) * L * 0.82, (cl_hash(sk + 1.1) - 0.5) * L * 0.36,
+                  H * (0.1 + 0.6 * mid * (0.4 + 0.6 * cl_hash(sk + 2.2))));
+    dist = cl_smin(dist, length(q - o) - r, L * 0.035);
+  }
+  // Lumps on the top, none on the base.
+  float up = clamp(q.z / max(H, 1.0), 0.0, 1.0);
+  float n = (cl_noise(p / max(L * 0.2, 2.0) + vec3(s)) - 0.5)
+          + (cl_noise(p / max(L * 0.09, 1.5) + vec3(s + 9.0)) - 0.5) * 0.3;
+  dist += n * m_puffy / 100.0 * L * 0.22 * up;
+  // The flat base: cut off what hangs below it.
+  float cut = -q.z - L * 0.12 * (1.0 - m_flat / 100.0);
+  return max(dist, cut);
+}
+
+// The distance to the nearest cloud of all the places around p.
+float cl_sky(vec3 p) {
+  vec3 size = i_volume_size;
+  float spacing = max(cl_len() * 1.25, 6.0);
+  vec2 g = floor(p.xy / spacing);
+  vec2 last = max(floor((size.xy - 0.5) / spacing), vec2(0.0));
+  float dist = 99.0;
+  for (int i = -1; i <= 1; i++) {
+    for (int j = -1; j <= 1; j++) {
+      vec2 id = g + vec2(float(i), float(j));
+      if (id.x < 0.0 || id.y < 0.0 || id.x > last.x || id.y > last.y) continue;
+      float s = dot(id, vec2(12.9898, 78.233)) + m_seed * 17.3;
+      // A grid with only one place always gets its cloud.
+      bool only = last.x < 0.5 && last.y < 0.5;
+      if (!only && cl_hash(s) * 100.0 >= m_density) continue;
+      dist = min(dist, cl_cloud(p, id, spacing));
+    }
+  }
+  return dist;
+}
+
+float map(vec3 v) {
+  vec3 p = floor(v) + 0.5;
+  float d = cl_sky(p);
+  if (d > 0.0) return voxel(v);
+  // Shade: open sky above and toward the sun is white, the shade is grey.
+  bool below = cl_sky(p - vec3(0.0, 0.0, 1.0)) > 0.0;
+  if (below) return i_color_index + 3.0;                           // the base
+  bool sky_up = cl_sky(p + vec3(0.0, 0.0, 1.0)) > 0.0;
+  bool sun = cl_sky(p + vec3(-2.0, 1.0, 2.0)) > 0.0;
+  if (sky_up && sun) return i_color_index;                         // in the sun
+  if (sky_up || sun) return i_color_index + 1.0;                   // half shade
+  return cl_sky(p - vec3(0.0, 0.0, 3.0)) > 0.0 ? i_color_index + 3.0 : i_color_index + 2.0;  // shade
+}

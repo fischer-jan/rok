@@ -1,0 +1,104 @@
+// xs nature/hills [Tile X] [Tile Y] [Height] [Scale] [Steepness] [Flowers] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'     var = 'm_tile_x'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'     var = 'm_tile_y'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'   range = '5 100'    value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'      var = 'm_scale'    range = '16 512'   value = '80'   step = '1'  precision = '0' }
+// arg : { name = 'Steepness'  var = 'm_steep'    range = '0 100'    value = '40'   step = '1'  precision = '0' }
+// arg : { name = 'Flowers'    var = 'm_flowers'  range = '0 100'    value = '25'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'     range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Soft green rolling hills with meadow patches and flowers'
+// rok_colours : { start = '0'  rgb = '8CCB5A 6BAA3C 4F8E2E 3A6E24 7A5A3C E8D34A F2F2EA' }
+// Rok puts these colours in the palette from the selected colour on: light
+// grass, grass, dark grass, deep green, soil, yellow and white flowers.
+// rok_tip Tile X : Which tile of a larger world this grid shows, counted in whole grids along x. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Tile Y : Which tile of a larger world this grid shows, counted in whole grids along y. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Height : How high the tallest hills stand, as a percent of a limit. The limit is the smaller of the grid height and 0.36 times the smaller of the grid width and depth. Steepness then scales it down. At 5 the ground is nearly flat (about 3 cells). 100 gives the tallest hills.
+// rok_tip Scale : The width of the hills in cells. Small values give many small hills. Large values give a few wide ones. The value is capped at 1.3 times the smaller of the grid width and depth. So on a 64 grid, values above 83 change nothing. On a 24 grid, values above 31 change nothing.
+// rok_tip Steepness : How tall the hills get, compared with the Height value. 0 gives 55 percent of it. 100 gives all of it. It only stretches the height, so the sides get steeper because the hills get taller.
+// rok_tip Flowers : How many flowers grow in the meadows, in percent. 0 gives none. Flowers are single cells on the top layer of gentle ground only. At 25 about 1 top cell in 40 has a flower on a 64 grid. At 100 it is about 1 in 10. A few white flowers show among the yellow ones, and only at high values.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the hills and the colour patches.
+
+// Seamless green hills. The ground is a soft noise, rounded into hills and
+// valleys with no rock and no cliffs. Steepness makes the hills taller and
+// their sides steeper. The grass is lighter on the tops and on the slopes that
+// face the sun, darker in the hollows and on the shaded sides, with big
+// patches of another green so the meadows are not one flat colour. Soil shows
+// under the grass on a cut face. Flowers are single yellow and white cells
+// scattered in the meadows. Tiles of one size with the same settings, placed
+// edge to edge in the order of their tile numbers, meet without a seam.
+
+float hl_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float hl_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = hl_hash(i);
+  float b = hl_hash(i + vec2(1.0, 0.0));
+  float c = hl_hash(i + vec2(0.0, 1.0));
+  float d = hl_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+// The tallest the ground gets, in cells: Height is a share of the grid's height,
+// but never more than 36 % of the ground's width.
+float hl_top() { return min(i_volume_size.z, 0.36 * min(i_volume_size.x, i_volume_size.y)) * m_height / 100.0; }
+
+// Scale in cells, but never much wider than the grid, so a small grid still
+// gets a hill and not a flat bit of one. All tiles of a set have one size,
+// so this keeps them seamless.
+float hl_scale() { return min(m_scale, 1.3 * min(i_volume_size.x, i_volume_size.y)); }
+
+// The ground height of a world column, in cells.
+float hl_ground(vec2 column) {
+  vec2 p = (column + 0.5) / hl_scale() + vec2(m_seed * 17.31 + 5.0, m_seed * 7.73 + 3.0);
+  float sum = 0.0;
+  float amp = 0.5;
+  float norm = 0.0;
+  for (int k = 0; k < 4; k++) {
+    sum += amp * hl_noise(p);
+    norm += amp;
+    amp *= 0.42;  // few small bumps: the hills stay smooth
+    p = p * 2.03 + vec2(31.7, 11.3);
+  }
+  float h = clamp((sum / norm - 0.32) / 0.38, 0.0, 1.0);
+  // Round the tops and flatten the valley floors a little, as an S curve does.
+  h = h * h * (3.0 - 2.0 * h);
+  float steep = mix(0.55, 1.0, m_steep / 100.0);
+  float top = max(hl_top(), 3.0);
+  return 2.0 + h * steep * (top - 2.0);
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  float ground = floor(hl_ground(column));
+  if (z >= ground) return 0.0;
+  float depth = ground - z;
+  // Soil under the grass, deep green below that on a cut face.
+  if (depth > 3.0) return i_color_index + 4.0;
+  // The slope: the ground's rise toward the sun (a light from the upper left).
+  float toward = hl_ground(column + vec2(-1.0, 1.0)) - hl_ground(column + vec2(1.0, -1.0));
+  float rise = clamp(toward * 0.5, -3.0, 3.0);
+  float patch = hl_noise(column / (hl_scale() * 0.22) + vec2(m_seed * 3.1, 9.7));
+  float tone = rise * 0.35 + (patch - 0.5) * 1.3 + (ground / max(hl_top(), 1.0) - 0.4) * 0.8;
+  float speck = hl_hash(column * 1.7 + vec2(m_seed));
+  if (depth > 1.0) return tone > 0.1 ? i_color_index + 2.0 : i_color_index + 3.0;  // under the top layer
+  // Flowers: single cells, more on the gentle flat ground of the meadows.
+  if (speck * 100.0 > 100.0 - m_flowers * 0.09 && abs(rise) < 1.2) {
+    return speck > 0.9997 - m_flowers * 0.00002 ? i_color_index + 6.0 : i_color_index + 5.0;
+  }
+  if (tone > 0.55) return i_color_index;
+  if (tone > 0.05) return i_color_index + 1.0;
+  if (tone > -0.45) return i_color_index + 2.0;
+  return i_color_index + 3.0;
+}

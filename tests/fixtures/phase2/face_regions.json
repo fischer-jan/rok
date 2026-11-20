@@ -1,0 +1,394 @@
+[
+ {
+  "fixture": "bird",
+  "voxel": [
+   0,
+   19,
+   12
+  ],
+  "normal": [
+   0,
+   -1,
+   0
+  ],
+  "wall": false,
+  "count": 4,
+  "bbox": [
+   [
+    0,
+    19,
+    12
+   ],
+   [
+    1,
+    19,
+    13
+   ]
+  ],
+  "sha1": "bd26a2bff511af9e966a165c707a3f1d1f17b95c"
+ },
+ {
+  "fixture": "bird",
+  "voxel": [
+   79,
+   34,
+   13
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": false,
+  "count": 80,
+  "bbox": [
+   [
+    75,
+    19,
+    13
+   ],
+   [
+    79,
+    35,
+    13
+   ]
+  ],
+  "sha1": "4cd425c5009fce7d10c72d0ad4307225344b5fb2"
+ },
+ {
+  "fixture": "bird",
+  "voxel": [
+   79,
+   34,
+   13
+  ],
+  "normal": [
+   1,
+   0,
+   0
+  ],
+  "wall": false,
+  "count": 32,
+  "bbox": [
+   [
+    79,
+    19,
+    12
+   ],
+   [
+    79,
+    34,
+    13
+   ]
+  ],
+  "sha1": "8a31c1d943826c6bc1d36b55fe15cfb1a27ec996"
+ },
+ {
+  "fixture": "bird",
+  "voxel": [
+   0,
+   0,
+   -1
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": true,
+  "count": 5408,
+  "bbox": [
+   [
+    0,
+    0,
+    0
+   ],
+   [
+    79,
+    67,
+    0
+   ]
+  ],
+  "sha1": "39b2a1917ca6b3e311b2459af87e476ef69bab96"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   0,
+   8,
+   4
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": false,
+  "count": 4,
+  "bbox": [
+   [
+    0,
+    8,
+    4
+   ],
+   [
+    3,
+    8,
+    4
+   ]
+  ],
+  "sha1": "17f51b479f083c3cc9438e9bab0f86a53197cb80"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   0,
+   8,
+   4
+  ],
+  "normal": [
+   0,
+   -1,
+   0
+  ],
+  "wall": false,
+  "count": 4,
+  "bbox": [
+   [
+    0,
+    8,
+    4
+   ],
+   [
+    3,
+    8,
+    4
+   ]
+  ],
+  "sha1": "17f51b479f083c3cc9438e9bab0f86a53197cb80"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   39,
+   51,
+   4
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": false,
+  "count": 4,
+  "bbox": [
+   [
+    36,
+    51,
+    4
+   ],
+   [
+    39,
+    51,
+    4
+   ]
+  ],
+  "sha1": "57d126cd67972feb1da0cef7626d43453911eb5b"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   39,
+   51,
+   4
+  ],
+  "normal": [
+   1,
+   0,
+   0
+  ],
+  "wall": false,
+  "count": 40,
+  "bbox": [
+   [
+    39,
+    43,
+    0
+   ],
+   [
+    39,
+    51,
+    8
+   ]
+  ],
+  "sha1": "2d2670907095158c0ff9c04d3f1d961ab4533072"
+ },
+ {
+  "fixture": "car",
+  "voxel": [
+   0,
+   0,
+   -1
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": true,
+  "count": 2384,
+  "bbox": [
+   [
+    0,
+    0,
+    0
+   ],
+   [
+    39,
+    59,
+    0
+   ]
+  ],
+  "sha1": "bf7cc85c3f0c71d8fa5d8c2c74917248eccb9f02"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   2,
+   12,
+   6
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": false,
+  "count": 3,
+  "bbox": [
+   [
+    2,
+    12,
+    6
+   ],
+   [
+    4,
+    12,
+    6
+   ]
+  ],
+  "sha1": "24df60d6389dc367633dcda036d8c44160470e80"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   2,
+   12,
+   6
+  ],
+  "normal": [
+   0,
+   -1,
+   0
+  ],
+  "wall": false,
+  "count": 3,
+  "bbox": [
+   [
+    2,
+    12,
+    6
+   ],
+   [
+    4,
+    12,
+    6
+   ]
+  ],
+  "sha1": "24df60d6389dc367633dcda036d8c44160470e80"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   21,
+   17,
+   6
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": false,
+  "count": 3,
+  "bbox": [
+   [
+    19,
+    17,
+    6
+   ],
+   [
+    21,
+    17,
+    6
+   ]
+  ],
+  "sha1": "8aeb1a9e3d41fb8e4d63641a3a88d15cc2de4331"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   21,
+   17,
+   6
+  ],
+  "normal": [
+   1,
+   0,
+   0
+  ],
+  "wall": false,
+  "count": 6,
+  "bbox": [
+   [
+    21,
+    12,
+    6
+   ],
+   [
+    21,
+    17,
+    6
+   ]
+  ],
+  "sha1": "1a0e52d7aded3b45dad4ccd9e86dffcfc561f9bb"
+ },
+ {
+  "fixture": "robot",
+  "voxel": [
+   0,
+   0,
+   -1
+  ],
+  "normal": [
+   0,
+   0,
+   1
+  ],
+  "wall": true,
+  "count": 612,
+  "bbox": [
+   [
+    0,
+    0,
+    0
+   ],
+   [
+    23,
+    29,
+    0
+   ]
+  ],
+  "sha1": "98f6d0220ab75d88279f81a45f47c87aee67d766"
+ }
+]

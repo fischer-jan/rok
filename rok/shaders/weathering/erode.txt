@@ -1,0 +1,69 @@
+// xs weathering/erode [Amount] [Scale] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Amount'  var = 'm_amount'  range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'   var = 'm_scale'   range = '1 16'    value = '2'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'    var = 'm_seed'    range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Wears corners and edges down like old stone'
+// rok_tip Amount : How much of the surface wears away, in percent. At 0 almost nothing goes. 100 wears away much of the surface.
+// rok_tip Scale : How big the chipped pieces are, in cells. 1 gives fine chips. 16 gives large chunks.
+// rok_tip Seed : Picks another random layout of the wear.
+
+// Wears the model down like old stone: corners go first, then edges, and a
+// flat face only here and there. Amount is how much goes, Scale how big the
+// chipped pieces are. Iterations wear it down further.
+//
+// How exposed a surface voxel is comes from two looks around it. The 27
+// nearest cells tell a flat face (9 of them empty) from an edge (15) and a
+// corner (19). The 125 cells of a 5 x 5 x 5 block round that off, so the
+// wear eats into an edge in chunks instead of cutting thin grooves. Noise
+// at Scale decides where the wear bites deeper.
+
+float er_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float er_noise(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = p - i;
+  vec3 u = f * f * (3.0 - 2.0 * f);
+  float a = mix(er_hash3(i), er_hash3(i + vec3(1.0, 0.0, 0.0)), u.x);
+  float b = mix(er_hash3(i + vec3(0.0, 1.0, 0.0)), er_hash3(i + vec3(1.0, 1.0, 0.0)), u.x);
+  float c = mix(er_hash3(i + vec3(0.0, 0.0, 1.0)), er_hash3(i + vec3(1.0, 0.0, 1.0)), u.x);
+  float d = mix(er_hash3(i + vec3(0.0, 1.0, 1.0)), er_hash3(i + vec3(1.0, 1.0, 1.0)), u.x);
+  return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here == 0.0) return 0.0;
+  // Only the surface wears: a voxel with an open side.
+  if (voxel(v + vec3(1.0, 0.0, 0.0)) > 0.0 && voxel(v - vec3(1.0, 0.0, 0.0)) > 0.0
+      && voxel(v + vec3(0.0, 1.0, 0.0)) > 0.0 && voxel(v - vec3(0.0, 1.0, 0.0)) > 0.0
+      && voxel(v + vec3(0.0, 0.0, 1.0)) > 0.0 && voxel(v - vec3(0.0, 0.0, 1.0)) > 0.0) return here;
+  float near = 0.0;
+  float wide = 0.0;
+  for (int i = -2; i <= 2; i++) {
+    for (int j = -2; j <= 2; j++) {
+      for (int k = -2; k <= 2; k++) {
+        if (voxel(v + vec3(float(i), float(j), float(k))) == 0.0) {
+          wide += 1.0;
+          if (abs(float(i)) < 1.5 && abs(float(j)) < 1.5 && abs(float(k)) < 1.5) near += 1.0;
+        }
+      }
+    }
+  }
+  // Each 0 on a flat face and 1 on a corner: 40 % of the wide block is
+  // empty on a face, 78 % on a corner.
+  float exposed = 0.6 * clamp((near - 9.0) / 10.0, 0.0, 1.2) + 0.4 * (wide / 125.0 - 0.4) / 0.38;
+  vec3 p = floor(v) + 0.5 + vec3(m_seed * 2.3, m_seed * 1.1, m_seed * 0.7);
+  float n = er_noise(p / m_scale) * 0.7 + er_noise(p / (m_scale * 0.5) + 17.0) * 0.3 - 0.5;
+  float grain = er_hash3(p) - 0.5;
+  float wear = exposed * 0.8 + n * 1.3 + grain * 0.25;
+  if (wear > 1.05 - m_amount / 100.0 * 1.1) return 0.0;
+  return here;
+}

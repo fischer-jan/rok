@@ -1,0 +1,18 @@
+[project]
+name = "rok"
+version = "0.0.1"
+description = "Rok - a voxel editor"
+requires-python = ">=3.11"
+dependencies = ["numpy>=2.0"]
+
+[project.optional-dependencies]
+# The MCP server (rok/mcp_server.py); the editor does not need it.
+mcp = ["mcp>=2.2"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-timeout", "pytest-xdist"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+timeout = 120

@@ -1,0 +1,8 @@
+// xs brush/rok_stripes
+//
+// A paint shader in the style of the brush/ set: it returns a colour for
+// every cell, filled or not; Rok lets it recolour filled cells only.
+
+float map(vec3 v) {
+  return mod(floor(v.x), 2.0) == 0.0 ? 9.0 : 0.0;
+}

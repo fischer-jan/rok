@@ -1,0 +1,148 @@
+// xs nature/mushrooms [Count] [Size] [Style] [Spots] [Lean] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Count'   var = 'm_count'  range = '1 9'     value = '5'    step = '1'  precision = '0' }
+// arg : { name = 'Size'    var = 'm_size'   range = '20 100'  value = '85'   step = '1'  precision = '0' }
+// arg : { name = 'Style'   var = 'm_style'  range = '0 2'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Spots'   var = 'm_spots'  range = '0 100'   value = '50'   step = '1'  precision = '0' }
+// arg : { name = 'Lean'    var = 'm_lean'   range = '0 100'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'    var = 'm_seed'   range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = 'F2EBDC CDBFA6 A8906E E0402F A82A20 F7F4EC 9A6234 C48A4E' }
+// rok_about : 'A cluster of toadstools: red with spots, or brown'
+// rok_flags : 'own_grid'
+// rok_tip Count : How many mushrooms, 1 to 9. The first and biggest stands in the middle, the others stand round
+// rok_tip Count : it and are smaller. Each stands on the ground the model has under its middle, or on the floor
+// rok_tip Count : of an empty grid. On a small grid they overlap.
+// rok_tip Size : The height of the biggest mushroom as a share of the grid height, in percent. 20 gives a tiny
+// rok_tip Size : one, 100 nearly the full height. The other mushrooms are about 0.4 to 0.8 of it. A mushroom is
+// rok_tip Size : at least 4 cells high. On a narrow grid the grid width also limits the size, because no cap may
+// rok_tip Size : cross the sides. On ground, a mushroom shrinks to fit the room above the ground.
+// rok_tip Style : 0 makes red toadstools with white spots and a ring on the stem. 1 makes brown mushrooms with
+// rok_tip Style : flatter caps and no spots. 2 makes a mix, about half red and half brown, picked by chance for
+// rok_tip Style : each mushroom.
+// rok_tip Spots : How many white spots the red caps have, in percent. 0 gives none, 100 gives many. The spots sit
+// rok_tip Spots : on the outer part of the cap. Only red caps get spots: Style 0, and about half of the mushrooms
+// rok_tip Spots : in Style 2. No effect with Style 1. Spots only recolour cells.
+// rok_tip Lean : How much the stems lean and bend, in percent. 0 gives straight stems. 100 leans the cap sideways
+// rok_tip Lean : by about a third of the mushroom's height. The cap moves with the stem. The mushroom shrinks
+// rok_tip Lean : when it would cross the grid sides.
+// rok_tip Seed : Picks another random layout of the same kind. Any whole number from 0 to 9999. The same seed
+// rok_tip Seed : always gives the same result.
+// Rok puts these colours in the palette from the selected colour on: light
+// and shaded stem, gills, then red cap, dark red, white spots, brown cap and
+// light brown.
+
+// A cluster of mushrooms on the ground (or the floor of an empty grid), a big one and smaller
+// ones round it. Each has a stem with a bulb at its foot and a domed cap
+// with gills under it. Style 0 makes red toadstools with white spots and a
+// ring on the stem, Style 1 brown ones with flatter caps, Style 2 a mix.
+// Count is how many, Size the biggest one's height as a share of the grid,
+// Spots how many white spots the red caps have, Lean how much the stems
+// lean and bend. Caps are lit from above: light on top, darker at the rim.
+// No mushroom crosses the grid's sides. The voxels already there stay.
+
+float mu_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float mu_hash3(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+// One mushroom k, at its foot c, ht tall, cap radius R: the colour offset
+// (0..7) of the cell at p, or -1.
+float mu_one(vec3 p, vec2 c, float ht, float R, float k, float s) {
+  float h = mu_hash(vec2(s, k));
+  bool red = m_style < 0.5 || (m_style > 1.5 && h < 0.5);
+  // The cap: a dome, half as tall as wide (flatter when brown), sitting on
+  // the stem's top.
+  float capH = R * (red ? 0.7 : 0.5);
+  float stemTop = ht - capH;
+  // The stem leans to one side and bends, more with Lean.
+  float a = mu_hash(vec2(s, k + 20.0)) * 6.2832;
+  vec2 lean = vec2(cos(a), sin(a)) * ht * 0.35 * m_lean / 100.0;
+  float t = clamp(p.z / max(stemTop, 1.0), 0.0, 1.0);
+  vec2 axis = c + lean * t * t;
+  vec2 top = c + lean;
+  // The cap: the cell's place from the middle of the cap's base.
+  vec3 q = vec3(p.xy - top, p.z - stemTop);
+  float e = length(vec3(q.xy / R, q.z / capH));
+  float under = -capH * 0.25 * (1.0 - min(length(q.xy) / R, 1.0));
+  if (e <= 1.0 && q.z >= under - 0.5) {
+    // Gills under the cap, but not at its rim.
+    if (q.z < under + 0.5 && length(q.xy) < R - 1.0) return 2.0;
+    if (red) {
+      // White spots: in a grid of 3.5 cells, one near the middle of some cells.
+      vec3 g = floor(p / 3.5);
+      vec3 o = vec3(mu_hash3(g + vec3(s)), mu_hash3(g + vec3(s + 1.0)), mu_hash3(g + vec3(s + 2.0)));
+      bool spot = e > 0.75 && mu_hash3(g + vec3(s + 3.0)) * 100.0 < m_spots && length(p - (g + 0.25 + o * 0.5) * 3.5) < 1.2;
+      if (spot) return 5.0;
+      return q.z > capH * 0.35 ? 3.0 : 4.0;
+    }
+    return q.z > capH * 0.45 ? 7.0 : 6.0;
+  }
+  // The stem, with a bulb at its foot, a little narrower at the top.
+  if (p.z < 0.0 || p.z > stemTop + 0.5) return -1.0;
+  float rs = max(0.6, R * 0.26) * (1.0 - 0.15 * t) * (1.0 + 0.5 * max(0.0, 1.0 - p.z / max(R * 0.5, 1.0)));
+  float d = length(p.xy - axis);
+  // A ring round the red ones' stems, under the cap.
+  bool ring = red && abs(p.z - stemTop * 0.72) < 0.6 && d < rs + 1.0;
+  if (d > rs + 0.05 && !ring) return -1.0;
+  // The stem is shaded on the side away from the light, and under the cap.
+  vec2 o = p.xy - axis;
+  bool shade = dot(o, vec2(0.0, 1.0)) > 0.3 || p.z > stemTop - 1.5;
+  return shade ? 1.0 : 0.0;
+}
+
+// The top of the ground in the column at c: the cell above the highest
+// filled one, or 0 on an empty floor.
+float mu_ground(vec2 c, float top) {
+  for (int i = 0; i < 256; i++) {
+    float z = top - 1.0 - float(i);
+    if (z < 0.0) return 0.0;
+    if (voxel(vec3(c, z + 0.5)) > 0.0) return z + 1.0;
+  }
+  return 0.0;
+}
+
+float map(vec3 v) {
+  vec3 p = floor(v) + 0.5;
+  vec3 size = i_volume_size;
+  float s = m_seed * 17.3 + 1.0;
+  float H = (size.z - 1.0) * m_size / 100.0;
+  vec2 mid = floor(size.xy * 0.5) + 0.5;
+  float room = min(size.x, size.y) * 0.5 - 1.0;
+  for (int i = 0; i < 9; i++) {
+    float k = float(i);
+    if (k >= m_count) break;
+    // The first stands in the middle, the others round it, each smaller,
+    // at a golden angle from the last.
+    float scale = k < 0.5 ? 1.0 : 0.38 + 0.4 * mu_hash(vec2(s, k + 40.0));
+    float ht = max(H * scale, 4.0);
+    float R = ht * (0.3 + 0.1 * mu_hash(vec2(s, k + 50.0)));
+    float a = k * 2.39996 + mu_hash(vec2(s, 60.0)) * 6.2832;
+    float dist = k < 0.5 ? 0.0 : room * (0.6 + 0.4 * mu_hash(vec2(s, k + 70.0)));
+    // Keep the whole cap (and its lean) inside the grid.
+    float reach = R + ht * 0.35 * m_lean / 100.0 + 1.0;
+    if (reach > room) { R *= room / reach; ht *= room / reach; reach = room; }
+    dist = min(dist, room - reach);
+    vec2 c = floor(mid + vec2(cos(a), sin(a)) * dist) + 0.5;
+    if (length(p.xy - c) > reach + 1.0) continue;
+    // It stands on the ground the model has under its middle.
+    float g = mu_ground(c, size.z);
+    if (g > 0.5) {
+      float fit = size.z - g - 1.0;
+      if (fit < 4.0) continue;
+      if (ht > fit) { R *= fit / ht; ht = fit; }
+    }
+    float col = mu_one(p - vec3(0.0, 0.0, g), c, ht, R, k, s);
+    if (col >= 0.0) return i_color_index + col;
+  }
+  return voxel(v);
+}

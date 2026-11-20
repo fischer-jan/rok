@@ -1,0 +1,10 @@
+// xs_begin
+// author : 'Rok test'
+// arg : { var = 'm_col' name = 'Colour' value = '9' range = '1 255' step = '1' precision = '0' }
+// xs_end
+// Every voxel with empty air above it turns colour m_col.
+float map(vec3 v) {
+    float c = voxel(v);
+    if (c > 0.0 && voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0) return m_col;
+    return c;
+}

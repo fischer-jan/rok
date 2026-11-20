@@ -1,0 +1,47 @@
+// xs patterns/stripes [Mode] [Width] [Axis]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Mode'   var = 'm_mode'   range = '0 3'   value = '0'  step = '1'  precision = '0' }
+// arg : { name = 'Width'  var = 'm_width'  range = '1 32'  value = '2'  step = '1'  precision = '0' }
+// arg : { name = 'Axis'   var = 'm_axis'   range = '0 2'   value = '2'  step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Paints bands, diagonal stripes, a checker or grid lines'
+// rok_tip Mode : 0 gives bands across Axis. 1 gives diagonal stripes. 2 gives a 3D checker. 3 draws grid lines in the first selected colour and keeps the colours of the model between the lines.
+// rok_tip Width : The width of a band, a stripe or a checker square, or the size of a grid cell in Mode 3, in cells. In Mode 3 a Width of 1 makes every voxel a grid line.
+// rok_tip Axis : The direction of the bands: 0 x, 1 y, 2 z. It works only in Mode 0. Modes 1, 2 and 3 ignore it.
+
+// Paints the voxels that are there in the selected colours, in turn. Mode 0
+// is bands across Axis (0 x, 1 y, 2 z), 1 diagonal stripes (hazard stripes
+// with a yellow and a black), 2 a 3D checker, 3 grid lines in the first
+// colour over the model's own colours. Width is how wide a band, a checker
+// square or a grid cell is.
+//
+// The grid is drawn in the plane of the face a voxel shows: (x + y, z) on a
+// wall, (x, y) on a floor. So a whole face never becomes a grid line.
+
+float map(vec3 v) {
+  float here = voxel(v);
+  if (here == 0.0) return 0.0;
+  vec3 c = floor(v);
+  float n = float(max(i_num_color_sels, 1));
+  float k;
+  if (m_mode < 0.5) {
+    float along = m_axis < 0.5 ? c.x : (m_axis < 1.5 ? c.y : c.z);
+    k = floor(along / m_width);
+  } else if (m_mode < 1.5) {
+    k = floor((c.x + c.y + c.z) / m_width);
+  } else if (m_mode < 2.5) {
+    vec3 cell = floor(c / m_width);
+    k = cell.x + cell.y + cell.z;
+  } else {
+    bool side = voxel(v + vec3(1.0, 0.0, 0.0)) == 0.0 || voxel(v - vec3(1.0, 0.0, 0.0)) == 0.0
+      || voxel(v + vec3(0.0, 1.0, 0.0)) == 0.0 || voxel(v - vec3(0.0, 1.0, 0.0)) == 0.0;
+    bool capped = voxel(v + vec3(0.0, 0.0, 1.0)) == 0.0 || voxel(v - vec3(0.0, 0.0, 1.0)) == 0.0;
+    vec2 uw = capped && !side ? c.xy : vec2(c.x + c.y, c.z);
+    vec2 in_cell = mod(uw, m_width);
+    if (in_cell.x == 0.0 || in_cell.y == 0.0) return color_sel(0.0);
+    return here;
+  }
+  return color_sel(mod(k, n));
+}

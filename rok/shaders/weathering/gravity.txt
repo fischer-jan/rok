@@ -1,0 +1,52 @@
+// xs weathering/gravity [Mode]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Mode'  var = 'm_mode'  range = '0 1'  value = '0'  step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Voxels fall straight down until they land'
+// rok_tip Mode : 0 lets every voxel fall until it lands. 1 lets only the voxels of the current colour fall, and they land on voxels of other colours. Nothing changes when no voxel has empty space under it, as with a model that already stands on the floor of the grid. In Mode 1 the model also needs voxels of the current colour.
+
+// Lets voxels fall straight down until they land. Mode 0: every voxel falls,
+// like sand, so each column settles on the floor. Mode 1: only voxels of the
+// selected colour fall, and they land on voxels of other colours, which stay
+// where they are. The colours keep their order in each column.
+
+// True when the cell holds a voxel that stays where it is.
+bool gr_fixed(vec3 c) {
+  float here = voxel(c);
+  return m_mode > 0.5 && here > 0.0 && here != i_color_index;
+}
+
+// True when the cell holds a voxel that falls.
+bool gr_falls(vec3 c) {
+  float here = voxel(c);
+  return here > 0.0 && (m_mode < 0.5 || here == i_color_index);
+}
+
+float map(vec3 v) {
+  if (gr_fixed(v)) return voxel(v);
+  // The stretch of the column this cell is in: from just above the fixed
+  // voxel (or the floor) below it, up to the fixed voxel (or the top) above.
+  float z = floor(v.z);
+  float bottom = 0.0;
+  for (int i = 1; i <= 256; i++) {
+    float below = z - float(i);
+    if (below < 0.0) break;
+    if (gr_fixed(vec3(v.x, v.y, below + 0.5))) { bottom = below + 1.0; break; }
+  }
+  // The falling voxels of the stretch stack up from its bottom, in order.
+  float want = z - bottom;
+  float seen = 0.0;
+  for (int i = 0; i <= 256; i++) {
+    float at = bottom + float(i);
+    if (at >= i_volume_size.z) break;
+    vec3 c = vec3(v.x, v.y, at + 0.5);
+    if (gr_fixed(c)) break;
+    if (gr_falls(c)) {
+      if (seen == want) return voxel(c);
+      seen += 1.0;
+    }
+  }
+  return 0.0;
+}

@@ -1,0 +1,180 @@
+// xs nature/desert [Tile X] [Tile Y] [Height] [Scale] [Style] [Wind] [Sharpness] [Seed]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Tile X'     var = 'm_tile_x'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Tile Y'     var = 'm_tile_y'   range = '0 64'     value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Height'     var = 'm_height'   range = '10 100'   value = '55'   step = '1'  precision = '0' }
+// arg : { name = 'Scale'      var = 'm_scale'    range = '16 512'   value = '70'   step = '1'  precision = '0' }
+// arg : { name = 'Style'      var = 'm_style'    range = '0 2'      value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Wind'       var = 'm_wind'     range = '0 360'    value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Sharpness'  var = 'm_sharp'    range = '0 100'    value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Seed'       var = 'm_seed'     range = '0 9999'   value = '0'    step = '1'  precision = '0' }
+// xs_end
+// rok_about : 'Desert: dunes, striped mesas or a canyon, in warm sand'
+// rok_colours : { start = '0'  rgb = 'EBD9A8 D9BA7A C29A55 C9A56A D0803F B0532F 7A3F2A E2C8A0 7A8A3A' }
+// Rok puts these colours in the palette from the selected colour on: light,
+// middle and dark sand, tan, orange, red and dark rock, pale rock, scrub.
+// rok_tip Tile X : Which tile of a larger world this grid shows, counted in whole grids along x. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Tile Y : Which tile of a larger world this grid shows, counted in whole grids along y. 0 is the first tile. Each tile number gives other land, and tiles with the same other settings meet without a seam. Use it to build a big map from many grids.
+// rok_tip Height : How high the dunes, mesas or plateau stand, as a percent of a limit. The limit is the smaller of the grid height and 0.35 times the smaller of the grid width and depth. On a 64 grid the limit is 22 cells, so a taller grid gives no more height.
+// rok_tip Scale : The size of the dunes, mesas or canyon in cells. For dunes it is the distance between crests. Small values give many small shapes. Large values give a few big ones. The value is capped at 1.3 times the smaller of the grid width and depth. So on a 64 grid, values above 83 change nothing. On a 24 grid, values above 31 change nothing.
+// rok_tip Style : 0 is dunes. 1 is flat mesas with banded cliffs. 2 is a canyon that winds through a plateau. This changes the whole land. Wind has an effect only for Style 0.
+// rok_tip Wind : The direction of the wind in degrees. The dune crests run across it. A dune has a gentle windward side and a steep lee side. 360 is the same as 0. Only for Style 0. With Style 1 or 2 it changes nothing.
+// rok_tip Sharpness : How crisp the crests and cliffs are. For dunes, a high value gives a steeper, darker lee face on a bigger part of each dune. For mesas and the canyon, a high value gives narrow, steep steps and a low value gives soft sloping ones. It works in all three styles.
+// rok_tip Seed : Picks another random layout of the same kind. Any number from 0 to 9999 gives a different but similar result. It moves the dunes, mesas or canyon.
+
+// Seamless desert tiles. Style 0 is dunes: long crests across the Wind, each
+// with a gentle slope on the windward side and a steep, darker slip face on
+// the lee, with small ripples on the sand. Style 1 is mesas: flat-topped
+// plateaus with cliffs whose rock is banded in tan, orange and red, on sand.
+// Style 2 is a canyon that winds through a plateau. Its walls go down in
+// steps and are banded the same way. Sharpness is how crisp the crests and
+// cliffs are. Tiles of one size with the same settings, placed edge to edge
+// in the order of their tile numbers, meet without a seam.
+//
+// The sand and the tops have large soft patches of colour, not a speckle of
+// single cells: from a distance a speckle reads as noise.
+
+float ds_hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.x, p.y, p.x) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+float ds_noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = ds_hash(i);
+  float b = ds_hash(i + vec2(1.0, 0.0));
+  float c = ds_hash(i + vec2(0.0, 1.0));
+  float d = ds_hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float ds_fbm(vec2 p) {
+  float sum = 0.0;
+  float amp = 0.5;
+  float norm = 0.0;
+  for (int k = 0; k < 4; k++) {
+    sum += amp * ds_noise(p);
+    norm += amp;
+    amp *= 0.5;
+    p = p * 2.03 + vec2(31.7, 11.3);
+  }
+  return sum / norm;
+}
+
+// The tallest the ground gets, in cells: Height is a share of the grid's height, but
+// never more than 35 % of the ground's width, so a tall grid does not give a tower.
+float ds_top() { return min(i_volume_size.z, 0.35 * min(i_volume_size.x, i_volume_size.y)) * m_height / 100.0; }
+
+// Scale in cells, but never much wider than the grid, so a small grid still
+// gets a mesa or a canyon. All tiles of a set have one size: this keeps
+// them seamless.
+float ds_scale() { return min(m_scale, 1.3 * min(i_volume_size.x, i_volume_size.y)); }
+
+// A world column's place in the noise.
+vec2 ds_p(vec2 column) { return (column + 0.5) / ds_scale() + vec2(m_seed * 17.31 + 5.0, m_seed * 7.73 + 3.0); }
+
+// Where a world column lies along the dunes: the whole part counts the
+// crests, the fraction is the place between two crests.
+float ds_dune_phase(vec2 column) {
+  vec2 p = ds_p(column);
+  float a = m_wind * 0.017453;
+  vec2 dir = vec2(cos(a), sin(a));
+  vec2 across = vec2(-dir.y, dir.x);
+  // Along the wind the crests repeat; across it they run on a long way and meander.
+  vec2 q = vec2(dot(p, dir) * 2.4, dot(p, across) * 0.4);
+  q.x += (ds_fbm(q * 0.8 + vec2(9.0, 4.0)) - 0.5) * 2.2;
+  return q.x;
+}
+
+// The steep side of a dune starts at this fraction.
+float ds_lee() { return mix(0.58, 0.78, m_sharp / 100.0); }
+
+// The ground height of a world column, in cells.
+float ds_ground(vec2 column) {
+  float top = ds_top();
+  vec2 p = ds_p(column);
+  float sharp = m_sharp / 100.0;
+  float h = 0.0;
+  if (m_style < 0.5) {
+    float s = fract(ds_dune_phase(column));
+    // A sawtooth with the steep side on the lee, rounded a little at the crest.
+    float lee = ds_lee();
+    float saw = s < lee ? s / lee : (1.0 - s) / (1.0 - lee);
+    saw = saw * saw * (3.0 - 2.0 * saw) * 0.5 + saw * 0.5;
+    float size = 0.4 + 0.6 * ds_fbm(p * 0.5 + vec2(21.0, 5.0));
+    float ripple = 1.0 - abs(2.0 * ds_noise(p * 6.0) - 1.0);
+    h = 0.1 + 0.6 * saw * size + 0.04 * ripple;
+  } else if (m_style < 1.5) {
+    // Mesas: broad noise cut into three levels with narrow, steep steps.
+    float n = ds_fbm(p * 1.1 + vec2(4.0, 17.0));
+    float t = clamp((n - 0.36) / 0.3, 0.0, 0.999) * 3.0;
+    float edge = mix(0.4, 0.04, sharp);
+    float step = floor(t) + smoothstep(0.5 - edge, 0.5 + edge, fract(t));
+    h = 0.14 + step / 3.0 * 0.76 + 0.015 * ds_noise(p * 8.0);
+  } else {
+    // A canyon: a winding cut through a plateau. It goes down in three steps
+    // with steep walls, to a sandy floor.
+    vec2 w = vec2(ds_fbm(p * 0.6 + vec2(3.1, 7.7)), ds_fbm(p * 0.6 + vec2(11.3, 1.9))) - 0.5;
+    float river = abs(ds_fbm(p * 1.0 + w * 1.2 + vec2(13.0, 2.0)) - 0.5);
+    float width = 0.1;
+    float cut = 1.0 - smoothstep(width * 0.25, width, river);  // 1 in the middle of the canyon
+    float t = cut * 3.0;
+    float edge = mix(0.4, 0.06, sharp);
+    float steps = (floor(min(t, 2.999)) + smoothstep(0.5 - edge, 0.5 + edge, fract(min(t, 2.999)))) / 3.0;
+    float plateau = 0.86 + 0.06 * ds_fbm(p * 1.5 + vec2(6.0, 8.0));
+    float floorH = 0.12 + 0.04 * ds_noise(p * 3.0);
+    h = mix(plateau, floorH, steps);
+  }
+  return 1.0 + clamp(h, 0.0, 1.0) * (top - 1.0);
+}
+
+float map(vec3 v) {
+  vec2 cell = floor(v.xy);
+  vec2 column = cell + vec2(m_tile_x, m_tile_y) * i_volume_size.xy;
+  float z = floor(v.z);
+  float ground = floor(ds_ground(column));
+  if (z >= ground) return 0.0;
+  float depth = ground - z;
+  // Soft patches of colour, with a little grain on top.
+  float tone = ds_noise(column / 7.0 + vec2(m_seed * 2.3, 5.0)) + (ds_hash(column + vec2(m_seed, z)) - 0.5) * 0.18;
+  // Colours from the selected one on: light, middle and dark sand, tan,
+  // orange, red and dark rock, pale rock, scrub.
+  if (m_style < 0.5) {
+    // Dunes: darker in the troughs and on the steep lee, lighter on the crests.
+    float s = fract(ds_dune_phase(column));
+    float band = ground / max(ds_top(), 1.0);
+    if (depth > 3.0) return i_color_index + 2.0;
+    if (s >= ds_lee()) return tone > 0.75 ? i_color_index + 1.0 : i_color_index + 2.0;
+    if (band > 0.45) return tone > 0.3 ? i_color_index : i_color_index + 1.0;
+    return tone > 0.62 ? i_color_index : i_color_index + 1.0;
+  }
+  // Mesas and canyon: banded rock where the ground is steep, sand and tan elsewhere.
+  float slope = max(
+    max(abs(floor(ds_ground(column + vec2(1.0, 0.0))) - ground),
+        abs(floor(ds_ground(column - vec2(1.0, 0.0))) - ground)),
+    max(abs(floor(ds_ground(column + vec2(0.0, 1.0))) - ground),
+        abs(floor(ds_ground(column - vec2(0.0, 1.0))) - ground)));
+  if (depth > 3.0 || slope >= 2.0) {
+    // The rock is banded by height all through: tan, orange, red, pale, a thin dark band.
+    float band = floor(z / 3.0 + ds_noise(column * 0.08) * 1.4);
+    float k = mod(band, 6.0);
+    if (k < 1.0) return i_color_index + 3.0;
+    if (k < 2.0) return i_color_index + 4.0;
+    if (k < 3.0) return i_color_index + 5.0;
+    if (k < 4.0) return i_color_index + 7.0;
+    if (k < 5.0) return i_color_index + 4.0;
+    return i_color_index + 6.0;
+  }
+  // The top layer: sand on the low ground with a little scrub, tan rock on the heights.
+  float low = ground / max(ds_top(), 1.0);
+  if (low < 0.34) {
+    if (ds_hash(column * 0.73 + vec2(m_seed, 4.0)) > 0.985) return i_color_index + 8.0;
+    return tone > 0.55 ? i_color_index : i_color_index + 1.0;
+  }
+  return tone > 0.78 ? i_color_index + 7.0 : i_color_index + 3.0;
+}

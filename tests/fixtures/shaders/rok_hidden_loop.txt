@@ -1,0 +1,7 @@
+// A macro that spells a loop: Rok expands it, so the guard sees the loop.
+#define REPEAT for
+float map(vec3 v) {
+  float n = 0.0;
+  REPEAT (;;) { n += 1.0; }
+  return n;
+}

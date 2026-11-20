@@ -1,0 +1,328 @@
+// xs hard_surface/greebles [Size] [Density] [Height] [Lights] [Seams] [Colour] [Seed] [Extras]
+//
+// xs_begin
+// author : 'Rok'
+// arg : { name = 'Size'     var = 'm_size'     range = '6 32'    value = '12'    step = '1'  precision = '0' }
+// arg : { name = 'Density'  var = 'm_density'  range = '0 100'   value = '70'   step = '1'  precision = '0' }
+// arg : { name = 'Height'   var = 'm_height'   range = '1 6'     value = '3'    step = '1'  precision = '0' }
+// arg : { name = 'Lights'   var = 'm_lights'   range = '0 100'   value = '35'   step = '1'  precision = '0' }
+// arg : { name = 'Seams'    var = 'm_seams'    range = '0 100'   value = '60'   step = '1'  precision = '0' }
+// arg : { name = 'Colour'   var = 'm_colour'   range = '0 1'     value = '1'    step = '1'  precision = '0' }
+// arg : { name = 'Seed'     var = 'm_seed'     range = '0 9999'  value = '0'    step = '1'  precision = '0' }
+// arg : { name = 'Extras'   var = 'm_extras'   range = '0 100'   value = '15'   step = '1'  precision = '0' }
+// xs_end
+// rok_colours : { start = '0'  rgb = '3A3F47 7FE7FF F2C230'  names = 'Dark metal, Light, Hazard yellow' }
+// rok_about : 'Pipes, vents, tanks, hatches and lights for hulls'
+// rok_removes : 'Seams cuts grooves into the hull between the panels (Seams 0 keeps the hull whole), and hatches and hangar doors sink into it.'
+// rok_tip Size : The width of one panel, in cells (6 to 32). Each flat face is cut into squares of this size and a square gets one part. A part needs flat hull over
+// rok_tip Size : the whole panel, with a free border of 1 cell. A panel that does not fit is tried again as four quarters, when half of Size is 6 or more. A satellite
+// rok_tip Size : dish needs a panel of 11 or more. A hangar door needs 12 or more.
+// rok_tip Density : How many panels get a part, in percent. 0 gives no part (panel lines can still be cut). 100 tries every panel. A panel with no part, or one where the
+// rok_tip Density : part does not fit, is tried again as four quarters.
+// rok_tip Height : How tall boxes and antenna masts may be, in cells (1 to 6). A box is 1 to Height cells high. A mast is Height cells high. Vents (2 cells at most),
+// rok_tip Height : tanks, dishes and long antennas ignore it, so some parts stand higher than Height.
+// rok_tip Lights : How many parts carry a light, in percent. The light is one cell on a box top, an antenna tip, a hangar corner or an airlock window, or a lamp in the
+// rok_tip Lights : row on a light plate. 0 gives no light. This changes few cells, and colours only.
+// rok_tip Seams : How many panel borders get a groove cut into the hull, in percent. 0 gives no groove. A groove is cut only where there is hull behind it, so a skin
+// rok_tip Seams : only one cell thick gets none.
+// rok_tip Colour : 0 or 1. With 1 the parts use the dark metal and hazard yellow colours. With 0 all parts keep the hull colour. The lights use the light colour with
+// rok_tip Colour : both values. This changes colours only.
+// rok_tip Seed : Picks another random layout of the same kind: other parts on other panels.
+// rok_tip Extras : How many of the panels with a part get a rare part, in percent: a satellite dish, a long antenna (up to 24 cells high), an airlock or a hangar door. 0
+// rok_tip Extras : gives only the common parts. A rare part needs a bigger panel. On a small panel a smaller part takes its place.
+
+// Machine detail on every flat face of the model (the
+// old boxes were too plain). Each face is cut into square panels of Size
+// cells. A panel gets one part, chosen at random:
+//   0 stepped box    - a box, stepped or straight, maybe with a light on top
+//   1 pipes          - one to three pipes along the panel, with clamps
+//   2 vent           - a box with a grille on top, dark inside
+//   3 tank           - a cylinder lying on the hull, on two saddles (half the panel wide)
+//   4 antenna        - a mast with a crossbar on a small plate, a light at the tip
+//   5 hatch          - sunk into the hull, in a dark frame (hazard stripes when large)
+//   6 light plate    - a low plate with a row of lights along one side
+// Extras is how many panels get one of the rare parts instead:
+//   7 satellite dish - a bowl of three rings on a mast, a feed over its middle
+//   8 long antenna   - a mast twice the panel high, rings, two crossbars, a light at the tip
+//   9 airlock        - a round door painted on the hull, a collar one cell proud, a window
+//  10 hangar door    - a big panel only: slatted doors in a frame of hazard stripes
+// A part goes only where its panel is flat hull all over, so nothing hangs
+// over an edge, and it keeps one cell clear of the panel's border. A panel
+// without a part, or one that does not fit, tries again as four quarters
+// of half the size (when that is 6 cells or more). Seams cut
+// panel lines into the hull between the panels (only where there is hull
+// behind, so a thin wall never gets a hole). Density is how many panels get
+// a part, Height how tall boxes and masts may be, Lights how many parts carry a light.
+// Colour 1 adds Rok's colours (the rok_colours line: dark metal, light,
+// hazard yellow); Colour 0 keeps every part in the hull colour but the lights.
+
+float gr_hash(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+vec3 gr_dir(float n) {
+  float axis = floor(n * 0.5);
+  float sgn = mod(n, 2.0) < 0.5 ? 1.0 : -1.0;
+  return axis < 0.5 ? vec3(sgn, 0.0, 0.0) : (axis < 1.5 ? vec3(0.0, sgn, 0.0) : vec3(0.0, 0.0, sgn));
+}
+
+// The in-plane coordinates of a cell on a face whose normal is along axis a.
+vec2 gr_plane(vec3 c, float a) {
+  return a < 0.5 ? c.yz : (a < 1.5 ? c.xz : c.xy);
+}
+
+// Back from the plane: the cell at in-plane q on layer l along axis a.
+vec3 gr_unplane(vec2 q, float a, float l) {
+  return a < 0.5 ? vec3(l, q.x, q.y) : (a < 1.5 ? vec3(q.x, l, q.y) : vec3(q.x, q.y, l));
+}
+
+float gr_layer(vec3 c, float a) {
+  return a < 0.5 ? c.x : (a < 1.5 ? c.y : c.z);
+}
+
+float gr_dark(float base) { return m_colour > 0.5 ? color_sel(0.0) : base; }
+float gr_light(float base) { return color_sel(1.0); }
+float gr_hazard(float base) { return m_colour > 0.5 ? color_sel(2.0) : base; }
+
+// The part of a panel of size S at panel level `level` (0 big, 1 quarter),
+// or -1 for none. A rare part that needs more room than the panel has
+// gives way to a smaller one.
+float gr_type(vec3 id, float S, float level) {
+  if (gr_hash(id) * 100.0 >= m_density) return -1.0;
+  if (gr_hash(id + 0.53) * 100.0 >= m_extras) return floor(gr_hash(id + 0.37) * 7.0);
+  float t = 7.0 + floor(gr_hash(id + 0.71) * 4.0);
+  if (t > 9.5 && (S < 12.0 || level > 0.5)) t = 7.0;  // a hangar door needs a big panel
+  if (t > 6.5 && t < 7.5 && S < 11.0) t = 9.0;         // a dish is nine cells across
+  if (t > 8.5 && t < 9.5 && S < 8.0) t = 8.0;          // an airlock six
+  return t;
+}
+
+// The panel is flat hull: its footprint (one cell in from the border) is
+// filled on the surface layer s and open just outside, at nine points.
+bool gr_fits(vec3 s, float a, vec3 d, vec2 cell, float S) {
+  float l = gr_layer(s, a);
+  for (int i = 0; i < 3; i++) {
+    for (int j = 0; j < 3; j++) {
+      vec2 uv = vec2(i == 0 ? 1.0 : (i == 1 ? floor(S * 0.5) : S - 2.0),
+                     j == 0 ? 1.0 : (j == 1 ? floor(S * 0.5) : S - 2.0));
+      vec3 p = gr_unplane(cell * S + uv, a, l) + 0.5;
+      if (voxel(p) == 0.0 || voxel(p + d) != 0.0) return false;
+    }
+  }
+  return true;
+}
+
+// The panel a cell of face n belongs to: the big one when it has a part
+// and fits, else its quarter (half the size), so a busy hull still gets
+// parts. Sets the panel's size S, the cell's place uv in it and the panel's
+// id; returns its part, -1 for none.
+float gr_panel(vec3 s, float a, vec3 d, float n, vec2 q, out vec2 uv, out vec3 id, out float S) {
+  uv = vec2(0.0);
+  id = vec3(0.0);
+  S = m_size;
+  for (int level = 0; level < 2; level++) {
+    S = level == 0 ? m_size : floor(m_size * 0.5);
+    if (S < 6.0) break;  // smaller parts read as noise
+    vec2 cell = floor(q / S);
+    uv = q - cell * S;
+    id = vec3(cell, n + 6.0 * float(level) + m_seed * 0.1);
+    float t = gr_type(id, S, float(level));
+    if (t >= 0.0 && gr_fits(s, a, d, cell, S)) return t;
+  }
+  return -1.0;
+}
+
+bool gr_in(vec2 uv, vec2 lo, vec2 hi) {
+  return all(greaterThanEqual(uv, lo)) && all(lessThan(uv, hi));
+}
+
+// The colour of the cell at uv on a panel, k cells out from the hull (k >= 1),
+// for a part of type t; 0 leaves it empty.
+float gr_part(float t, vec3 id, vec2 uv, float k, float base, float S) {
+  float H = m_height;
+  bool lit = gr_hash(id + 8.8) * 100.0 < m_lights;
+  if (gr_hash(id + 0.91) < 0.5) uv = uv.yx;  // the part turns a quarter
+  float m = floor(S * 0.5);
+  if (t > 2.5 && t < 3.5) {
+    // Tank: a cylinder along u, on two saddles, as wide as half the panel
+    // (Height does not limit it); a panel too small for one gives a box.
+    float r = min(floor((S - 2.0) * 0.25), 5.0);
+    if (r >= 2.0) {
+      if (uv.x < 2.0 || uv.x >= S - 2.0) return 0.0;
+      float y = k - 0.5 - r;
+      float x = uv.y + 0.5 - S * 0.5;
+      bool cap = uv.x == 2.0 || uv.x == S - 3.0;
+      float rr = cap ? r - 0.6 : r;
+      if (x * x + y * y <= rr * rr + 0.25) {
+        return (uv.x == m || cap) ? gr_dark(base) : base;
+      }
+      bool saddle = (uv.x == 3.0 || uv.x == S - 4.0) && abs(x) <= r - 0.5 && y < 0.0;
+      return saddle ? gr_dark(base) : 0.0;
+    }
+    t = 0.0;
+  }
+  if (t < 0.5) {
+    // Stepped box: a random block inside the panel; stepped ones shrink by a cell a layer.
+    vec2 lo = 1.0 + floor(vec2(gr_hash(id + 1.1), gr_hash(id + 2.2)) * S * 0.3);
+    vec2 hi = S - 1.0 - floor(vec2(gr_hash(id + 3.3), gr_hash(id + 4.4)) * S * 0.3);
+    float h = 1.0 + floor(gr_hash(id + 5.5) * H);
+    float inset = gr_hash(id + 6.6) < 0.5 ? k - 1.0 : 0.0;
+    if (k > h || !gr_in(uv, lo + inset, hi - inset)) return 0.0;
+    vec2 mid = floor((lo + hi) * 0.5);
+    if (k == h && lit && uv == mid) return gr_light(base);
+    return base;
+  }
+  if (t < 1.5) {
+    // Pipes along u, two cells apart, in dark metal; clamps at the ends and the middle.
+    float n = clamp(floor((S - 3.0) * 0.5), 1.0, 3.0);
+    float first = floor((S - (2.0 * n - 1.0)) * 0.5);
+    float last = first + 2.0 * (n - 1.0);
+    if (uv.x < 1.0 || uv.x >= S - 1.0) return 0.0;
+    bool clamp_u = uv.x == 1.0 || uv.x == S - 2.0 || uv.x == m;
+    bool across = uv.y >= first - 1.0 && uv.y <= last + 1.0;
+    if (clamp_u && across && k <= 2.0) return base;
+    bool pipe = uv.y >= first && uv.y <= last && mod(uv.y - first, 2.0) == 0.0;
+    return (pipe && k == 1.0) ? gr_dark(base) : 0.0;
+  }
+  if (t < 2.5) {
+    // Vent: a box two high with slots across its top; the inside shows dark.
+    float h = min(2.0, H);
+    if (k > h || !gr_in(uv, vec2(1.0), vec2(S - 1.0))) return 0.0;
+    bool inner = gr_in(uv, vec2(2.0), vec2(S - 2.0));
+    if (k == h && inner && mod(uv.y, 2.0) == 0.0) return 0.0;
+    if (k < h && inner) return gr_dark(base);
+    return base;
+  }
+  if (t < 4.5) {
+    // Antenna: a plate, a mast as tall as Height, a crossbar under the tip, a light on top.
+    float h = max(1.0, H);
+    if (k == 1.0 && abs(uv.x - m) <= 1.0 && abs(uv.y - m) <= 1.0) return gr_dark(base);
+    if (uv == vec2(m) && k <= h) return (k == h && lit) ? gr_light(base) : base;
+    if (h >= 3.0 && k == h - 1.0 && uv.y == m && abs(uv.x - m) <= 1.0) return base;
+    return 0.0;
+  }
+  if (t > 6.5) {
+    vec2 g = uv + 0.5 - S * 0.5;  // from the panel's centre
+    float dd = dot(g, g);
+    if (t < 7.5) {
+      // Satellite dish: a mast two high on a plate, a bowl of three rings
+      // (wider each layer), a feed on a strut over its middle.
+      vec2 o = uv - m;
+      float od = dot(o, o);
+      if (k == 1.0 && abs(o.x) <= 1.0 && abs(o.y) <= 1.0) return gr_dark(base);
+      if (k == 2.0 && od == 0.0) return gr_dark(base);
+      if (od == 0.0 && k >= 4.0 && k <= 6.0) return (k == 6.0 && lit) ? gr_light(base) : gr_dark(base);
+      // Each layer overlaps the one under it, so the bowl holds together.
+      if (k == 3.0 && od <= 2.0) return base;
+      if (k == 4.0 && od <= 8.0) return base;
+      if (k == 5.0 && od >= 4.0 && od <= 18.0) return base;
+      return 0.0;
+    }
+    if (t < 8.5) {
+      // Long antenna: a mast twice the panel high (24 at most) on a plate, a
+      // dark ring every six cells, two crossbars, a light at the tip.
+      float L = min(2.0 * S, 24.0);
+      if (k == 1.0 && abs(uv.x - m) <= 1.0 && abs(uv.y - m) <= 1.0) return gr_dark(base);
+      if (uv == vec2(m)) {
+        if (k > L) return 0.0;
+        if (k == L) return lit ? gr_light(base) : base;
+        return mod(k, 6.0) == 0.0 ? gr_dark(base) : base;
+      }
+      bool bar = (k == floor(L / 3.0) && uv.y == m && abs(uv.x - m) <= 2.0)
+              || (k == floor(2.0 * L / 3.0) && uv.x == m && abs(uv.y - m) <= 2.0);
+      return bar ? base : 0.0;
+    }
+    if (t < 9.5) {
+      // Airlock: a round collar one cell proud; the door is painted on the hull (map).
+      float R = S * 0.5 - 1.0;
+      return (k == 1.0 && dd > (R - 1.0) * (R - 1.0) && dd <= R * R) ? gr_dark(base) : 0.0;
+    }
+    // Hangar door: a frame of hazard stripes one cell proud, a light on each
+    // corner; the doors are painted on the hull (map).
+    bool frame = gr_in(uv, vec2(1.0), vec2(S - 1.0)) && !gr_in(uv, vec2(2.0), vec2(S - 2.0));
+    bool corner = (uv.x == 1.0 || uv.x == S - 2.0) && (uv.y == 1.0 || uv.y == S - 2.0);
+    if (k == 1.0 && frame) return mod(uv.x + uv.y, 4.0) < 2.0 ? gr_hazard(base) : gr_dark(base);
+    if (k == 2.0 && corner && lit) return gr_light(base);
+    return 0.0;
+  }
+  if (t < 5.5) return 0.0;  // a hatch is cut into the hull itself (map, the hull's part)
+  // Light plate: one cell high, a row of lights along one side.
+  if (k != 1.0 || !gr_in(uv, vec2(1.0), vec2(S - 1.0))) return 0.0;
+  if (uv.y == 1.0 && uv.x > 1.0 && uv.x < S - 2.0 && mod(uv.x, 2.0) == 0.0) {
+    return lit ? gr_light(base) : gr_dark(base);
+  }
+  return base;
+}
+
+float map(vec3 v) {
+  float here = voxel(v);
+  vec3 c = floor(v);
+  if (here > 0.0) {
+    // The hull itself: panel lines and hatches, on cells open on one side only.
+    float open = -1.0;
+    float count = 0.0;
+    for (int n = 0; n < 6; n++) {
+      if (voxel(v + gr_dir(float(n))) == 0.0) { count += 1.0; open = float(n); }
+    }
+    if (count != 1.0) return here;  // inside, or an edge: the outline stays whole
+    vec3 d = gr_dir(open);
+    float a = floor(open * 0.5);
+    bool behind = voxel(v - d) != 0.0;
+    vec2 q = gr_plane(c, a);
+    vec2 uv;
+    vec3 id;
+    float S;
+    float t = gr_panel(c, a, d, open, q, uv, id, S);
+    if (t == 5.0) {
+      // A hatch: sunk one cell inside a frame of hazard stripes.
+      if (gr_in(uv, vec2(2.0), vec2(S - 2.0))) return behind ? 0.0 : here;
+      if (gr_in(uv, vec2(1.0), vec2(S - 1.0))) {
+        // Stripes need room: a small hatch has a plain dark frame.
+        if (S < 9.0) return gr_dark(here);
+        return mod(uv.x + uv.y, 4.0) < 2.0 ? gr_hazard(here) : gr_dark(here);
+      }
+    } else if (t == 9.0) {
+      // An airlock's door: dark metal inside the collar, a window in the middle.
+      vec2 g = uv + 0.5 - S * 0.5;
+      float R = S * 0.5 - 1.0;
+      float dd = dot(g, g);
+      if (dd <= (R - 1.0) * (R - 1.0)) {
+        bool lit = gr_hash(id + 8.8) * 100.0 < m_lights;
+        return (dd <= 0.5 && lit) ? gr_light(here) : gr_dark(here);
+      }
+    } else if (t == 10.0 && gr_in(uv, vec2(2.0), vec2(S - 2.0))) {
+      // A hangar's doors: two leaves with a seam, slats every third cell.
+      if (uv.x == floor(S * 0.5) || mod(uv.y - 2.0, 3.0) == 0.0) return gr_dark(here);
+      return here;
+    }
+    // Panel lines on the big panels' borders.
+    vec2 cell = floor(q / m_size);
+    uv = q - cell * m_size;
+    if (behind && (uv.x == 0.0 || uv.y == 0.0)) {
+      float side = uv.x == 0.0 ? 1.0 : 2.0;
+      if (gr_hash(vec3(cell, open * 3.0 + side + 17.0 + m_seed * 0.1)) * 100.0 < m_seams) return 0.0;
+    }
+    return here;
+  }
+  // Empty space: the part of the panel this cell stands over, k cells out.
+  for (int n = 0; n < 6; n++) {
+    vec3 d = gr_dir(float(n));
+    float a = floor(float(n) * 0.5);
+    for (int k = 1; k <= 24; k++) {  // the tallest part: a long antenna
+      float base = voxel(v - d * float(k));
+      if (base == 0.0) continue;
+      vec3 s = c - d * float(k);
+      vec2 uv;
+      vec3 id;
+      float S;
+      float t = gr_panel(s, a, d, float(n), gr_plane(c, a), uv, id, S);
+      if (t < 0.0) break;
+      float col = gr_part(t, id, uv, float(k), base, S);
+      if (col > 0.0) return col;
+      break;
+    }
+  }
+  return 0.0;
+}
